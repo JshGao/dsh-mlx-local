@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+
+- 完全移除内置 `mlx-local` provider 与设置页 provider 选项;DSH 模型选择器只使用你已有的自定义提供方。
+- 新增 `llm/stream` 拦截器(`lib/stream.js`):不注册任何 provider,但拦截指向本地 MLX 服务的 openai-completions 请求,把主界面选择的思考强度正确翻译为 `chat_template_kwargs`。
+- 自动升级 `llm-pi-ai` 中指向本地 MLX 服务的 Qwen3 模型配置(`reasoningEfforts` + `thinkingFormat: qwen`),因此主界面对话框选择模型时会像其他思考模型一样显示 **Off / High**。
+- 移除设置页“所选模型开启思考(Qwen3)”复选框;服务级 `thinkMode` 仍保留为默认值。
+- 服务启动改为外部监督进程:即使 DSH 被强杀(SIGKILL),监督脚本也会检测父进程消失并杀死 python,彻底消除孤儿进程。
+- 热插拔/停用插件/DSH 正常退出时,继续通过 dispose 同步清理服务进程组。
+
 ## 0.2.1
 
 - 内置 `mlx-local` provider 改为**默认关闭**(`registerProvider: false`):日常使用自定义提供方即可,不会在模型菜单里多出 provider;需要时在设置页勾选开启。

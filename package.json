@@ -1,7 +1,7 @@
 {
   "name": "dsh-mlx-local",
-  "description": "在 Apple Silicon 上用 MLX 框架运行本地大模型:模型目录管理、服务启停、OpenAI 兼容 API;既可用自定义提供方接入 DSH,也可按需注册内置 LLM 提供者(mlx-local)。",
-  "version": "0.2.1",
+  "description": "在 Apple Silicon 上用 MLX 框架运行本地大模型:模型目录管理、服务启停、OpenAI 兼容 API,并优化 DSH 自定义提供方的本地思考强度选择。",
+  "version": "0.2.2",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",
@@ -19,7 +19,7 @@
     "apple-silicon"
   ],
   "scripts": {
-    "check": "node --check lib/index.js && node --check lib/llm.js && node --check lib/client.js && node --check dsh-mlx-local.dyn.js",
+    "check": "node --check lib/index.js && node --check lib/stream.js && node --check lib/client.js && node --check dsh-mlx-local.dyn.js",
     "test": "node --test test/*.test.mjs",
     "pack": "npm run check && npm test && npm pack"
   },

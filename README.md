@@ -4,7 +4,7 @@
 
 - **加载不同的模型** — 维护一个模型目录(HF 仓库或本地路径),随时 `mlx_switch_model` 切换服务加载的模型
 - **开启/停止服务** — 以子进程管理 `mlx_lm.server`(OpenAI 兼容 API),启动、停止、状态、崩溃检测、残留进程回收一应俱全
-- **注册为 DSH 自身的 LLM 提供者** — 路由名 `mlx-local`:在模型选择器里直接选本地模型,发起推理时按需启动/切换本地服务,流式输出、思考块、工具调用全部翻译成 DSH 协议
+- **不注册额外 provider** — 继续使用你已有的自定义提供方;插件拦截本地 openai-completions 请求,把主界面选择的思考强度正确翻译给 `mlx_lm.server`
 - **也提供 `mlx_*` 工具** — 让智能体在对话中直接控制本地服务,并保留手工"添加 OpenAI 兼容 provider"的接入方式
 - **自带 Python 环境** — 插件运行在自有 venv 中;探测宿主机上版本合适的 Python(3.9–3.13,优先 3.10–3.12)创建虚拟环境并安装 `mlx-lm`;找不到合适 Python 时给出安装引导
 
@@ -24,19 +24,19 @@
 
 ### 方式 A:标准 npm 插件(功能完整)
 
-标准插件包含内置 LLM 提供者、完整 `mlx_*` 工具、设置页栏目与 `/mlx/api`:
+标准插件包含完整 `mlx_*` 工具、设置页栏目与 `/mlx/api`,并通过拦截器优化自定义提供方的本地思考强度:
 
 ```bash
 dsh plugin --profile web add /Users/jianshun/Documents/DeepSeekHarness/dsh-mlx-local
 # 或安装发布包:
-dsh plugin --profile web add dsh-mlx-local-0.2.0.tgz
+dsh plugin --profile web add dsh-mlx-local-0.2.2.tgz
 ```
 
 配置写入 DSH 设置命名空间 `mlx-local`(`~/.dsh/settings.yaml`),重启 DSH 后仍生效。
 
 ### 方式 B:动态插件(完全热插拔)
 
-`dsh-mlx-local.dyn.js` 导出的 `HOST_CODE` / `CLIENT_CODE` 是动态沙箱版模板:更新插件**无需重启 DSH**(对话中 define + run 即可)。动态版在沙箱内没有 `fetch`/Node 子进程 API,因此**不包含内置 LLM 提供者**,只提供服务控制工具与精简设置面板;需要内置 provider 时请使用方式 A。
+`dsh-mlx-local.dyn.js` 导出的 `HOST_CODE` / `CLIENT_CODE` 是动态沙箱版模板:更新插件**无需重启 DSH**(对话中 define + run 即可)。动态版只提供服务控制工具与精简设置面板。
 
 Web profile 已内置动态插件所需的 `shell` 服务,无需修改 `cordis.patch.yml`。
 
@@ -68,9 +68,9 @@ cordis_run(mode: "update")
    `mlx_start` — 默认加载目录中第一个模型(或 `defaultModel`)。就绪后状态自动变为 `running`。
 
 3. **让 DSH 跑在本地模型上**
-   - **推荐(默认)**:继续使用你已经配置的“自定义提供方” `local`(openai-completions → `http://127.0.0.1:8080/v1`,API Key 任意值);
-   - 插件默认**不注册** `mlx-local` 路由,避免模型菜单里多出容易混淆的 provider;
-   - 若确实希望模型选择器里出现 **MLX Local**:在 设置 → MLX 模型 中勾选 `registerProvider` 并保存,新会话/刷新后即可选择;此时 `serveOnDemand`(默认开启)会在推理前自动启动/切换服务,且 Qwen3 会显示“开启思考/关闭思考”开关;
+   - 继续使用你已经配置的“自定义提供方” `local`(openai-completions → `http://127.0.0.1:8080/v1`,API Key 任意值);
+   - 插件不会注册额外 provider;首次激活时会自动为指向本地服务的 Qwen3 模型补全思考配置;
+   - 之后在主界面对话框选择该本地模型时,会像其他思考模型一样显示 **Off / High** 思考强度;
    - 流式输出、思考块(`reasoning`)与工具调用均可用,推荐 Qwen3。
 
 4. **切换模型 / 停止服务**
@@ -103,13 +103,10 @@ cordis_run(mode: "update")
 | `port` | `8080` | 服务端口 |
 | `defaultModel` | `""` | 自动启动/默认加载的模型 id;为空时取目录第一个 |
 | `autoStart` | `false` | DSH 启动/插件热载入时自动拉起服务 |
-| `serveOnDemand` | `true` | 仅当注册了 `mlx-local` 路由时生效:发起推理自动启动/切换服务 |
-| `registerProvider` | `false` | 是否在 DSH 模型选择器中注册 `mlx-local` 路由;关闭时使用自定义提供方 |
-| `thinkMode` | `auto` | 服务级思考模式:auto/on/off;auto 时按各模型 `thinking` 字段决定(Qwen3 自动开启) |
+| `thinkMode` | `auto` | 服务级思考默认值:auto/on/off;auto 时按各模型 `thinking` 字段决定(Qwen3 自动开启) |
 | `serverArgs` | `[]` | 附加启动参数 |
-| `streamIdleTimeoutMs` | `300000` | LLM provider 流式读取空闲超时 |
 | `venvPython` | 自动探测/创建 | `~/.dsh/mlx/venv/bin/python`(Python 3.9–3.13 + mlx-lm) |
-| `models` | 内置 3 个 HF 模型 | 模型目录;每项可设置 `thinking`(是否开启思考);当前机器设置中已保存为 `~/Documents/LLM Model/` 下的本地模型 |
+| `models` | 内置 3 个 HF 模型 | 模型目录;每项可设置 `thinking`;当前机器设置中已保存为 `~/Documents/LLM Model/` 下的本地模型 |
 
 内置默认模型目录(HF 仓库;本机若已保存设置,则以设置中的本地路径为准):
 
@@ -135,7 +132,7 @@ cordis_run(mode: "update")
 
 本地模型兼容 **OpenAI chat/completions 协议**(流式 + 工具调用),即 DSH 自定义提供方中的 **`openai-completions`** 协议。
 
-### 接入方式一:自定义提供方(默认/推荐)
+### 接入方式:自定义提供方
 
 在 **设置 → 模型 → 添加 provider** 中:
 
@@ -143,17 +140,9 @@ cordis_run(mode: "update")
 2. route 名:任意(如 `local`);
 3. 协议:**`openai-completions`**;
 4. baseURL:`http://127.0.0.1:8080/v1`(设置 → MLX 模型 栏目中展示,可一键复制);
-5. 模型 id:任意(如 `local`),实际由服务当前加载的模型应答,API Key 填任意值。
+5. 模型 id 与 API Key 填任意值(本地服务不校验)。
 
-### 接入方式二:内置 `mlx-local` 提供者(可选)
-
-插件默认不注册该路由。若在 设置 → MLX 模型 中开启 `registerProvider`,模型选择器会出现 **MLX Local**,且 Qwen3 提供“开启思考/关闭思考”开关。发起推理时适配器会:
-
-1. 若服务未运行且 `serveOnDemand=true` → 自动 `mlx_start`;
-2. 若当前加载模型与所选模型不一致 → 自动 `mlx_switch_model`;
-3. 把 harness 消息、tools、system prompt 序列化为 OpenAI 请求,并把 SSE 流翻译回 DSH 的 `StreamChunk` 协议。
-
-> 思考控制有两个层级:设置页“思考模式”是服务启动默认值;模型选择器里的开关通过 `chat_template_kwargs` 每次请求生效,无需重启服务。
+插件会自动升级指向本地服务的 Qwen3 模型配置,使主界面模型选择器显示 **Off / High** 思考强度;实际请求由插件的 `llm/stream` 拦截器直接发给 `mlx_lm.server`,并把思考强度翻译为 `chat_template_kwargs`。
 
 ## 设置页栏目(Web UI)
 
@@ -163,8 +152,8 @@ cordis_run(mode: "update")
 - **切换模型** — 下拉选择模型目录中的模型,一键切换(自动停旧启新)
 - **API 接入** — 展示并一键复制 OpenAI 兼容 API 地址(`http://127.0.0.1:<port>/v1`)
 - **查看状态** — 运行状态、当前模型、pid、端口、运行时长、最近日志
-- **设置参数** — 默认模型、端口、autoStart、registerProvider(可选的内置 provider 路由)、所选模型的 `thinking` 思考开关、思考模式(服务级)、附加启动参数,保存即持久化
-- **退出清理** — DSH 退出时同步 SIGTERM 服务进程组,并派发 detached 兜底脚本,SIGKILL 残留;服务随 DSH 一起退出
+- **设置参数** — 默认模型、端口、autoStart、思考模式(服务级默认值)、附加启动参数,保存即持久化
+- **退出清理** — DSH 退出/插件停用/热插拔时同步终止服务进程组;即使 DSH 被强杀,监督进程也会杀死 python
 - **残留回收** — 检测到端口被异常进程占用(疑似卡死/孤儿)时提示,可直接点击"回收残留服务"清理对应 Python 进程
 
 > 栏目通过插件自带的 `/mlx/api` 接口与 host 通信(仅本机回环同源可访问);参数保存后写入设置命名空间 `mlx-local`。

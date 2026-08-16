@@ -5,16 +5,15 @@
 ```
 ┌─────────────────────────── DSH (node, web profile) ───────────────────────────┐
 │                                                                                │
-│  dsh-mlx-local 插件 (lib/index.js + lib/llm.js + lib/client.js)               │
+│  dsh-mlx-local 插件 (lib/index.js + lib/stream.js + lib/client.js)            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────────┐          │
-│  │ MlxLlmAdapter│  │  mlx_* 工具  │  │ MlxServer (子进程管理器)      │          │
-│  │ (LlmAdapter) │  │ (defineTool) │  │  ├─ 状态机 stopped/starting/  │          │
-│  │  提供者       │  │  10 个工具    │  │  │   running/stopping        │          │
-│  │  mlx-local   │  └──────┬───────┘  │  ├─ 就绪轮询 /health          │          │
-│  └──────┬───────┘         │           │  ├─ 崩溃/端口占用检测         │          │
-│         │  ctx.llm        │ ctx.tools │  └────────────┬──────────────┘          │
-│         └──────┬──────────┴───────────┘               │ spawn                    │
-│                │                                      ▼                          │
+│  │ llm/stream   │  │  mlx_* 工具  │  │ MlxServer (子进程管理器)      │          │
+│  │ 拦截器        │  │ (defineTool) │  │  ├─ 状态机 stopped/starting/  │          │
+│  │ 本地自定义路由│  │  10 个工具    │  │  │   running/stopping        │          │
+│  └──────┬───────┘  └──────┬───────┘  │  ├─ 就绪轮询 /health          │          │
+│         │  ctx.llm        │ ctx.tools │  ├─ 监督进程:父 pid 消失即杀  │          │
+│         └──────┬──────────┴───────────┘  └────────────┬──────────────┘          │
+│                │                                      │ spawn sh 监督进程        │
 │  installSettingsSection ──► ctx.settings (mlx-local 命名空间)                   │
 └────────────────────────────────────────────┬────────────────────────────────────┘
                                              │
@@ -31,7 +30,7 @@
 
 两条"接入"通道:
 
-1. **LLM 提供者通道(可选,默认关闭)**:`registerProvider=true` 时,`MlxLlmAdapter`(lib/llm.js)注册为 `ctx.llm` 的 `mlx-local` 提供者,把 harness 会话序列化为 OpenAI chat/completions 请求发给本地服务,并把 SSE 流翻译回 harness 的 `StreamChunk` 协议。用户在模型选择器选中本地模型后,智能体的每一次推理都发生在本地 MLX 模型上;`serveOnDemand=true` 时适配器会在请求前自动启动/切换服务。默认关闭时使用自定义提供方(`llm-pi-ai` 的 openai-completions 路由)。
+1. **LLM 请求拦截通道(不注册 provider)**:插件监听 `llm/stream`,当请求的 provider 是 `llm-pi-ai` 中指向 `127.0.0.1`/`localhost` 的 openai-completions 自定义路由时,直接由本插件把 harness 会话序列化为 OpenAI chat/completions 请求发给本地服务,并把 SSE 流翻译回 harness 的 `StreamChunk` 协议;其他 provider 原样走 `next()`。模型选择器仍由 `llm-pi-ai` 负责,插件只自动补齐 Qwen3 的 `reasoningEfforts`,因此主界面可选 Off/High 思考强度。
 2. **工具通道(智能体控制服务)**:`mlx_*` 工具经 `ctx.tools.register` 注册,智能体在对话中即可启动/停止/切换/增删/预下载模型、发起一次性对话。
 
 ## 进程与状态模型
@@ -97,7 +96,7 @@ harness 消息 ──► serializeMessages ──► OpenAI 消息数组
 | 文件 | 职责 |
 |---|---|
 | `lib/index.js` | 配置 Schema、日志环、Python venv 管理、`MlxServer` 状态机、`mlx_*` 工具、`/mlx/api`、生命周期装配 |
-| `lib/llm.js` | `MlxLlmAdapter`:消息序列化、SSE 解析、`StreamChunk` 翻译、`mlx-local` 注册 |
+| `lib/stream.js` | 本地 openai-completions 请求拦截:消息序列化、SSE 解析、`StreamChunk` 翻译、`reasoningEffort → chat_template_kwargs` |
 | `lib/client.js` | Web 设置页 "MLX 模型" 栏目(手写 React,bundle 格式) |
 | `dsh-mlx-local.dyn.js` | 动态沙箱版模板(`HOST_CODE` / `CLIENT_CODE`,控制工具子集) |
 | `test/llm.test.mjs` | 消息序列化、SSE 解析、流翻译的纯函数单元测试 |

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseSse, serializeMessages, translate } from "../lib/llm.js";
+import { parseSse, serializeMessages, translate } from "../lib/stream.js";
 
 function sseBody(text, chunks = []) {
 	return new ReadableStream({

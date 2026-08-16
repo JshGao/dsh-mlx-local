@@ -2,11 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveConfig } from "../lib/index.js";
 
-test("resolveConfig: defaults for new provider options", () => {
+test("resolveConfig: defaults for MLX service options", () => {
 	const config = resolveConfig({});
-	assert.equal(config.serveOnDemand, true);
-	assert.equal(config.registerProvider, false);
-	assert.equal(config.streamIdleTimeoutMs, 300000);
 	assert.equal(config.autoStart, false);
 	assert.equal(config.host, "127.0.0.1");
 	assert.equal(config.port, 8080);

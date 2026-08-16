@@ -66,19 +66,23 @@ mlx_start  serverArgs: ["--max-kv-size", "4096"]
 - 私有仓库需配置 HF token(见上);
 - 下载进度与错误见 `mlx_status` 最近日志。
 
-## 接入 DSH(提供者)
+## 接入 DSH(自定义提供方)
 
-### 模型选择器里没有 mlx-local
-这是预期行为:0.2.1 起 `registerProvider` **默认关闭**,推荐继续使用自定义提供方(如 `local` / openai-completions)。若想在模型选择器里看到 **MLX Local**,到 设置 → MLX 模型 勾选“在模型选择器中注册 mlx-local 提供者”并保存。
+### 本地模型请求报 SERVER_OFFLINE / SERVER_MODEL_MISMATCH
+- 插件不会自动注册 provider;请求本地自定义提供方时若服务未运行,会返回 `SERVER_OFFLINE`,请先 `mlx_start`。
+- 若服务正在运行但加载的模型与所选模型不一致,会返回 `SERVER_MODEL_MISMATCH`;执行 `mlx_switch_model` 即可。
+- 也可以开启 `autoStart` + `defaultModel`,让 DSH 启动时自动拉起服务。
 
-### 选中 mlx-local 模型后报 SERVER_OFFLINE / SERVER_MODEL_MISMATCH
-- 默认 `serveOnDemand=true`,适配器会在推理前自动启动/切换服务;如果仍报 `SERVER_OFFLINE`,先让智能体执行 `mlx_status` 查看 Python 环境与最近日志(常见原因是 venv 未初始化或端口被占用)。
-- 若在设置里关闭了 `serveOnDemand`,服务未运行会返回 `SERVER_OFFLINE`,模型不一致会返回 `SERVER_MODEL_MISMATCH`;执行 `mlx_start` / `mlx_switch_model`,或重新打开 `serveOnDemand` 即可。
-- 也可以打开设置开启 `autoStart` + `defaultModel`,让 DSH 启动时自动拉起服务。
+### 主界面没有思考强度开关
+插件会为 `llm-pi-ai` 中指向本地 MLX 服务的 Qwen3 模型自动补全 `reasoningEfforts` 与 `compat.thinkingFormat`。如果仍没有:
+- 确认自定义提供方的 `baseURL` 是 `http://127.0.0.1:<port>/v1` 或 `localhost`;
+- 确认模型 id/name 中包含 `Qwen3`;
+- 重启 DSH 后打开一个新会话再查看模型选择器。
 
-### Qwen3 思考开关
-- 自定义提供方通道:用 设置 → MLX 模型 中的“思考模式”(服务级,下次启动生效)和所选模型的“开启思考(Qwen3)”复选框。
-- 内置 `mlx-local` 通道:Qwen3 在模型选择器中显示“开启思考/关闭思考”,该开关通过请求级 `chat_template_kwargs` 即时生效,无需重启服务。
+### Qwen3 思考强度
+- 主界面模型选择器中选择本地 Qwen3 后,会显示 **Off / High**;
+- 该选择由插件拦截器翻译成 `chat_template_kwargs.enable_thinking`,无需重启服务;
+- 设置页“思考模式”仍作为服务启动默认值(下次启动生效)。
 
 ### 工具调用不生效(模型只会输出文本)
 当前模型不支持函数调用。mlx_lm.server 只在模型的 tokenizer 支持工具时启用工具解析,推荐使用 **Qwen3** 系列(默认目录中的 `qwen3-8b`)。
