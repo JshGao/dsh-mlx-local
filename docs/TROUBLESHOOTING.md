@@ -1,5 +1,7 @@
 # 故障排查
 
+> [English](TROUBLESHOOTING.en.md) · [中文](TROUBLESHOOTING.md)
+
 ## 安装
 
 ### 提示 pnpm 找不到或安装失败

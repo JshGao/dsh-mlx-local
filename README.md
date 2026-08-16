@@ -2,6 +2,8 @@
 
 > 本插件是向DSH许愿得到的，本人不对其中的屎山代码负责。
 
+> [English](README.en.md) · [中文](README.md)
+
 在 Apple Silicon Mac 上通过 DSH 运行本地大模型。插件负责管理 Python 环境、启动和停止 `mlx_lm.server`,并把本地服务接入 DSH 已有的自定义 provider。
 
 ## 功能
