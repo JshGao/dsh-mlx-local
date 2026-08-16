@@ -22,7 +22,7 @@
 
 本仓库同时提供两种安装形态;两者共享 `~/.dsh/mlx/` 下的 venv 与日志,配置存储位置不同。**同一时间只启用一种**,避免重复注册 `mlx_*` 工具。
 
-### 方式 A:标准 npm 插件(功能完整)
+### 方式 A:标准 npm 插件(功能完整,安装/卸载需重启 DSH)
 
 标准插件包含完整 `mlx_*` 工具、设置页栏目与 `/mlx/api`,并通过拦截器优化自定义提供方的本地思考强度:
 
@@ -32,11 +32,17 @@ dsh plugin --profile web add /Users/jianshun/Documents/DeepSeekHarness/dsh-mlx-l
 dsh plugin --profile web add dsh-mlx-local-0.2.2.tgz
 ```
 
-配置写入 DSH 设置命名空间 `mlx-local`(`~/.dsh/settings.yaml`),重启 DSH 后仍生效。
+卸载:
 
-### 方式 B:动态插件(完全热插拔)
+```bash
+dsh plugin --profile web remove dsh-mlx-local
+```
 
-`dsh-mlx-local.dyn.js` 导出的 `HOST_CODE` / `CLIENT_CODE` 是动态沙箱版模板:更新插件**无需重启 DSH**(对话中 define + run 即可)。动态版只提供服务控制工具与精简设置面板。
+`dsh plugin add/remove` 修改 profile 依赖与 bundle 栈,**需要重启 DSH 才会装载/卸载插件**;插件本身已实现完整 dispose,卸载后重启不会残留本地模型服务。配置写入 DSH 设置命名空间 `mlx-local`(`~/.dsh/settings.yaml`)。
+
+### 方式 B:动态插件(真正不关 DSH 的热插拔)
+
+`dsh-mlx-local.dyn.js` 导出的 `HOST_CODE` / `CLIENT_CODE` 是动态沙箱版模板:**在对话中执行 `cordis_define` + `cordis_run(mode:"run")` 即可安装,`cordis_run(mode:"update")` 更新,`cordis_stop` 停止,`cordis_undefine` 永久移除——全程无需重启 DSH**。动态版只提供服务控制工具与精简设置面板,不含 `llm/stream` 思考强度拦截器。
 
 Web profile 已内置动态插件所需的 `shell` 服务,无需修改 `cordis.patch.yml`。
 
