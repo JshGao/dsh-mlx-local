@@ -27,8 +27,9 @@
     "lib",
     "docs",
     "README.md",
+    "CHANGELOG.md",
     "cordis.patch.yml",
-    "CHANGELOG.md"
+    "dsh-mlx-local.dyn.js"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -56,6 +57,9 @@
     },
     "./client": {
       "default": "./lib/client.js"
+    },
+    "./dyn": {
+      "default": "./dsh-mlx-local.dyn.js"
     },
     "./package.json": "./package.json"
   }
