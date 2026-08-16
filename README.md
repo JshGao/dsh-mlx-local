@@ -26,16 +26,22 @@
 
 ## 安装
 
-### 方式一:使用发布包
+### 方式一:使用 GitHub Release 发布包
 
-1. 将 `dsh-mlx-local-0.2.2.tgz` 放到目标机器;
-2. 执行:
+直接安装:
 
 ```bash
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.2/dsh-mlx-local-0.2.2.tgz
+```
+
+如果 DSH 不跟随下载跳转,先手动下载:
+
+```bash
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.2/dsh-mlx-local-0.2.2.tgz
 dsh plugin --profile web add ./dsh-mlx-local-0.2.2.tgz
 ```
 
-3. 重启 DSH。
+安装后重启 DSH。
 
 ### 方式二:从源码安装
 
