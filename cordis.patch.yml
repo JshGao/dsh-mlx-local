@@ -1,0 +1,7 @@
+# dsh-mlx-local bundle patch
+#
+# 通过 `dsh plugin --profile <name> add <路径|包名>` 安装时,CLI 会将本包加入
+# profile 的 bundle 栈,并在启动时合并此 patch,挂载插件入口。
+- insert:
+    - id: dsh-mlx-local
+      name: 'dsh-mlx-local'
