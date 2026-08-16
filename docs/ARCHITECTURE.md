@@ -80,8 +80,8 @@ harness 消息 ──► serializeMessages ──► OpenAI 消息数组
                                         harness StreamChunk 协议
 ```
 
-- 服务未运行且 `serveOnDemand=false` → `LlmError(SERVER_OFFLINE)`;模型不一致 → `SERVER_MODEL_MISMATCH`。
-- 空闲看门狗(`streamIdleTimeoutMs`)→ `TIMEOUT`;调用方中止 → `ABORTED`;HTTP 错误映射 400→`INVALID_REQUEST`、429→`RATE_LIMIT`、5xx→`SERVER`。
+- 服务未运行 → `LlmError(SERVER_OFFLINE)`;模型不一致 → `SERVER_MODEL_MISMATCH`。
+- 空闲看门狗 → `TIMEOUT`;调用方中止 → `ABORTED`;HTTP 错误映射 400→`INVALID_REQUEST`、429→`RATE_LIMIT`、5xx→`SERVER`。
 - 请求带 `attributionHeaders()`(dsh-llm 契约要求),不发 API key(本地服务无需鉴权)。
 
 ## 设置与热更新
@@ -99,18 +99,18 @@ harness 消息 ──► serializeMessages ──► OpenAI 消息数组
 | `lib/stream.js` | 本地 openai-completions 请求拦截:消息序列化、SSE 解析、`StreamChunk` 翻译、`reasoningEffort → chat_template_kwargs` |
 | `lib/client.js` | Web 设置页 "MLX 模型" 栏目(手写 React,bundle 格式) |
 | `dsh-mlx-local.dyn.js` | 动态沙箱版模板(`HOST_CODE` / `CLIENT_CODE`,控制工具子集) |
-| `test/llm.test.mjs` | 消息序列化、SSE 解析、流翻译的纯函数单元测试 |
+| `test/stream.test.mjs` | 消息序列化、SSE 解析、流翻译的纯函数单元测试 |
 
 ## 生命周期
 
 | 事件 | 行为 |
 |---|---|
-| 插件加载 | 注册工具、系统提示片段;`registerProvider=true` 时才注册 `mlx-local` 提供者;若 `autoStart` 且目录非空则延迟启动 defaultModel/首个模型 |
+| 插件加载 | 注册工具、系统提示片段、llm/stream 本地拦截器;若 `autoStart` 且目录非空则延迟启动 defaultModel/首个模型 |
 | 设置变更 | 模型目录等即时生效;端口/参数变更在下一次启动时采用(运行中的实例保留自己的实际监听值) |
 | 服务崩溃 | 状态回到 `stopped`,`exitInfo` + 最近日志可查 |
 | 端口占用 | 启动前探测 `/health`;健康服务占用则报错;无响应的 Python 残留进程自动回收后重试 |
-| DSH 退出 | `dispose` 同步 SIGTERM 服务进程组并派发 detached 清理脚本;`process.exit` 时同步 SIGKILL 进程组兜底 |
-| 模型切换 | `mlx_switch_model` / 适配器按需切换 = stop + start;切换期间在途流式请求中断并按 ABORTED/STREAM_CLOSED 报错,上层可重试 |
+| DSH 退出 / 插件停用 / 热插拔 | `dispose` 同步 SIGTERM 服务进程组并派发 detached 清理脚本;`process.exit` 时同步 SIGKILL;即使 DSH 被强杀,监督进程也会在父 pid 消失后杀死 python |
+| 模型切换 | `mlx_switch_model` = stop + start;切换期间在途流式请求中断并按 ABORTED/STREAM_CLOSED 报错,上层可重试 |
 
 ## 安全边界
 

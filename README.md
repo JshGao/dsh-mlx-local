@@ -57,6 +57,16 @@ cordis_run(mode: "update")
 
 **DSH 重启后**:动态插件不持久,重复"激活"步骤即可(配置保存在 `~/.dsh/mlx/config.json` 自动继承;若残留模型服务进程,激活时自动接管)。
 
+### 热插拔、停用与退出行为
+
+| 场景 | 行为 |
+|---|---|
+| 动态插件更新(`cordis_define` + `cordis_run(mode:"update")`) | 旧实例 dispose → 同步终止服务进程组 → 新实例接管;更新无需重启 DSH |
+| 标准插件热重载 / `dsh plugin remove` | 插件 fiber 卸载时执行同一 dispose 清理,`bootTimer`/轮询定时器一并取消 |
+| DSH 正常退出 | `dispose` 同步 SIGTERM + `process.exit` 同步 SIGKILL 兜底 |
+| DSH 被强杀 | detached 监督进程检测父 pid 消失,1–5 秒内结束 python |
+| 残留进程 | 新实例启动时自动 `adopt`;设置页也可点击"回收残留服务" |
+
 ## 快速开始
 
 安装/激活插件后,新会话中智能体即可使用 `mlx_*` 工具。典型流程:
