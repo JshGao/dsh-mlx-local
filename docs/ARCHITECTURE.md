@@ -31,13 +31,13 @@
 
 两条"接入"通道:
 
-1. **LLM 提供者通道(接入 DSH 自身)**:`MlxLlmAdapter`(lib/llm.js)注册为 `ctx.llm` 的 `mlx-local` 提供者,把 harness 会话序列化为 OpenAI chat/completions 请求发给本地服务,并把 SSE 流翻译回 harness 的 `StreamChunk` 协议。用户在模型选择器选中本地模型后,智能体的每一次推理都发生在本地 MLX 模型上;`serveOnDemand=true` 时适配器会在请求前自动启动/切换服务。
+1. **LLM 提供者通道(可选,默认关闭)**:`registerProvider=true` 时,`MlxLlmAdapter`(lib/llm.js)注册为 `ctx.llm` 的 `mlx-local` 提供者,把 harness 会话序列化为 OpenAI chat/completions 请求发给本地服务,并把 SSE 流翻译回 harness 的 `StreamChunk` 协议。用户在模型选择器选中本地模型后,智能体的每一次推理都发生在本地 MLX 模型上;`serveOnDemand=true` 时适配器会在请求前自动启动/切换服务。默认关闭时使用自定义提供方(`llm-pi-ai` 的 openai-completions 路由)。
 2. **工具通道(智能体控制服务)**:`mlx_*` 工具经 `ctx.tools.register` 注册,智能体在对话中即可启动/停止/切换/增删/预下载模型、发起一次性对话。
 
 ## 进程与状态模型
 
 - **插件进程**(node,随 DSH 生命周期):管理状态机与子进程;DSH 退出时 `dispose` 钩子优雅停止服务。
-- **服务进程**(venv python,`mlx_lm.server`):单进程单模型,监听 `127.0.0.1:<port>`。
+- **服务进程**(venv python,`mlx_lm.server`):单进程单模型,以独立进程组启动,监听 `127.0.0.1:<port>`;DSH 退出时整组终止。
 - 状态迁移:`stopped → starting → running`,`running → stopping → stopped`;崩溃(exit 事件且非 stopping)自动回到 `stopped` 并记录 `exitInfo` 与最近日志。
 - 就绪判定:启动后每 500ms 探测 `GET /health`;`startTimeoutMs` 内未就绪不杀进程,改由后台定时器持续探测并在就绪时提升状态(覆盖首次下载权重耗时较长的情况)。
 - 并发安全:`start()` 通过 `startPromise` 守卫,并发调用共享同一启动任务;`stop()` 幂等。
@@ -106,11 +106,11 @@ harness 消息 ──► serializeMessages ──► OpenAI 消息数组
 
 | 事件 | 行为 |
 |---|---|
-| 插件加载 | 注册 `mlx-local` 提供者、工具、系统提示片段;若 `autoStart` 且目录非空则延迟启动 defaultModel/首个模型 |
+| 插件加载 | 注册工具、系统提示片段;`registerProvider=true` 时才注册 `mlx-local` 提供者;若 `autoStart` 且目录非空则延迟启动 defaultModel/首个模型 |
 | 设置变更 | 模型目录等即时生效;端口/参数变更在下一次启动时采用(运行中的实例保留自己的实际监听值) |
 | 服务崩溃 | 状态回到 `stopped`,`exitInfo` + 最近日志可查 |
 | 端口占用 | 启动前探测 `/health`;健康服务占用则报错;无响应的 Python 残留进程自动回收后重试 |
-| DSH 退出 | `dispose` 钩子 SIGTERM 停止服务,并派发 detached 清理脚本兜底 SIGKILL |
+| DSH 退出 | `dispose` 同步 SIGTERM 服务进程组并派发 detached 清理脚本;`process.exit` 时同步 SIGKILL 进程组兜底 |
 | 模型切换 | `mlx_switch_model` / 适配器按需切换 = stop + start;切换期间在途流式请求中断并按 ABORTED/STREAM_CLOSED 报错,上层可重试 |
 
 ## 安全边界

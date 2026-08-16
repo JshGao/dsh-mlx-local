@@ -5,10 +5,18 @@ import { resolveConfig } from "../lib/index.js";
 test("resolveConfig: defaults for new provider options", () => {
 	const config = resolveConfig({});
 	assert.equal(config.serveOnDemand, true);
+	assert.equal(config.registerProvider, false);
 	assert.equal(config.streamIdleTimeoutMs, 300000);
 	assert.equal(config.autoStart, false);
 	assert.equal(config.host, "127.0.0.1");
 	assert.equal(config.port, 8080);
+});
+
+test("resolveConfig: infers Qwen3 thinking for legacy model ids", () => {
+	const config = resolveConfig({
+		models: [{ id: "mlx-community-Qwen3-8B-4bit", repo: "/tmp/qwen3", name: "Qwen3" }]
+	});
+	assert.equal(config.models[0].thinking, true);
 });
 
 test("resolveConfig: rejects invalid serverArgs and thinkMode", () => {
