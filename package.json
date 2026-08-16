@@ -19,7 +19,7 @@
     "apple-silicon"
   ],
   "scripts": {
-    "check": "node --check lib/index.js && node --check lib/stream.js && node --check lib/client.js && node --check dsh-mlx-local.dyn.js",
+    "check": "node --check lib/index.js && node --check lib/stream.js && node --check lib/client.js",
     "test": "node --test test/*.test.mjs",
     "pack": "npm run check && npm test && npm pack"
   },
@@ -28,8 +28,7 @@
     "docs",
     "README.md",
     "CHANGELOG.md",
-    "cordis.patch.yml",
-    "dsh-mlx-local.dyn.js"
+    "cordis.patch.yml"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -57,9 +56,6 @@
     },
     "./client": {
       "default": "./lib/client.js"
-    },
-    "./dyn": {
-      "default": "./dsh-mlx-local.dyn.js"
     },
     "./package.json": "./package.json"
   }
