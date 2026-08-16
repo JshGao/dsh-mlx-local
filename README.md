@@ -31,14 +31,14 @@
 直接安装:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.2/dsh-mlx-local-0.2.2.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.3/dsh-mlx-local-0.2.3.tgz
 ```
 
 如果 DSH 不跟随下载跳转,先手动下载:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.2/dsh-mlx-local-0.2.2.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.2.2.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.3/dsh-mlx-local-0.2.3.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.2.3.tgz
 ```
 
 安装后重启 DSH。
@@ -50,7 +50,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.2.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.2.3.tgz
 ```
 
 然后重启 DSH。
