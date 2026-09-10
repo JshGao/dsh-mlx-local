@@ -4,3 +4,8 @@ node_modules/
 *.log
 .idea/
 .vscode/
+
+# 本地开发产物
+.npm-cache/
+dev/
+.dshtest*/

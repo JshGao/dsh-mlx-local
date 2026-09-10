@@ -4,9 +4,18 @@ import { resolveConfig } from "../lib/index.js";
 
 test("resolveConfig: defaults for MLX service options", () => {
 	const config = resolveConfig({});
-	assert.equal(config.autoStart, false);
 	assert.equal(config.host, "127.0.0.1");
 	assert.equal(config.port, 8080);
+	// 已经移除随 DSH 启动自动拉起服务的开关;配置里不应再出现该字段。
+	assert.equal("autoStart" in config, false);
+});
+
+test("resolveConfig: drops a leftover autoStart from older settings", () => {
+	// 旧版本写进 settings.yaml 的 autoStart 会原样通过 schema(schemastery 不剥离
+	// 未知键),必须在 resolveConfig 这一层丢掉,否则残留值会一路带进运行时配置。
+	const config = resolveConfig({ autoStart: true, port: 9000 });
+	assert.equal("autoStart" in config, false);
+	assert.equal(config.port, 9000);
 });
 
 test("resolveConfig: infers Qwen3 thinking for legacy model ids", () => {

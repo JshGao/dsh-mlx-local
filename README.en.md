@@ -19,7 +19,7 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 |---|---|
 | Hardware | Apple Silicon (M-series) Mac |
 | OS | macOS 13 or later |
-| DSH | DeepSeek Harness 0.1.0-rc.6 and a working `dsh` command |
+| DSH | DeepSeek Harness 0.1.5-rc.1 and a working `dsh` command |
 | Python | 3.9–3.13, recommended 3.10–3.12; the plugin suggests `brew install python@3.12` when missing |
 | Network | Internet is needed the first time to download Hugging Face weights |
 | Disk | About 2–6 GB per 4-bit model |
@@ -31,14 +31,14 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 Install directly:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.3/dsh-mlx-local-0.2.3.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
 ```
 
 If DSH does not follow redirects, download it manually first:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.3/dsh-mlx-local-0.2.3.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.2.3.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
 ```
 
 Restart DSH after installing.
@@ -50,7 +50,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.2.3.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
 ```
 
 Then restart DSH.
@@ -74,6 +74,7 @@ Then restart DSH.
 ## Model Management
 
 - Local model directories are saved in Settings; you can also load another local MLX model directory from the Settings page.
+- The service is **never started automatically with DSH**: you start it explicitly each time (the **Start** button in Settings, or the `mlx_start` tool), so it never claims memory behind your back.
 - Hugging Face models are downloaded automatically on first start; you can also pre-download them with `mlx_pull_model`.
 - Switching models stops the old service first, then starts the new one.
 - The plugin does not register an `mlx-local` provider; use DSH's custom provider for access.

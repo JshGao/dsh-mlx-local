@@ -21,7 +21,7 @@
 |---|---|
 | 硬件 | Apple Silicon(M 系列)Mac |
 | 系统 | macOS 13 或更高 |
-| DSH | DeepSeek Harness 0.1.0-rc.6 及可用的 `dsh` 命令 |
+| DSH | DeepSeek Harness 0.1.5-rc.1 及可用的 `dsh` 命令 |
 | Python | 3.9–3.13,建议 3.10–3.12;未安装时插件会给出 `brew install python@3.12` 提示 |
 | 网络 | 首次使用 HF 模型时需要联网下载权重 |
 | 磁盘 | 每个 4-bit 模型约 2–6 GB |
@@ -33,14 +33,14 @@
 直接安装:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.3/dsh-mlx-local-0.2.3.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
 ```
 
 如果 DSH 不跟随下载跳转,先手动下载:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.2.3/dsh-mlx-local-0.2.3.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.2.3.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
 ```
 
 安装后重启 DSH。
@@ -52,7 +52,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.2.3.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
 ```
 
 然后重启 DSH。
@@ -76,6 +76,7 @@ dsh plugin --profile web add ./dsh-mlx-local-0.2.3.tgz
 ## 模型管理
 
 - 本地模型目录会保存在设置中;也可以在设置页中加载新的本地 MLX 模型。
+- 服务**不随 DSH 启动自动拉起**:每次都由你显式启动(设置页的「启动」,或 `mlx_start` 工具),以免在意想不到的时候占用内存。
 - HF 模型首次启动时会自动下载,也可以使用 `mlx_pull_model` 预下载。
 - 切换模型会先停止旧服务再启动新服务。
 - 插件不会自动注册 `mlx-local` provider;接入统一使用 DSH 自定义 provider。
