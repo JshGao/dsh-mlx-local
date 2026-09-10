@@ -24,6 +24,28 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 | Network | Internet is needed the first time to download Hugging Face weights |
 | Disk | About 2–6 GB per 4-bit model |
 
+## Version and updates
+
+Current version: **0.4.0**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+
+> **0.4.0 is a breaking release — two things to know:**
+
+1. **Auto-start with DSH has been removed.** The service is now always started explicitly by you: the **Start** button in Settings, or the `mlx_start` tool. The `autoStart` config field is gone too; a leftover value in an older settings file is ignored automatically, so you do not need to edit `settings.yaml` by hand.
+2. **DSH requirement raised to 0.1.5-rc.1.** The plugin was written against the `0.1.0-rc.x` line and **failed to load at all** on 0.1.5-rc.1 (three named imports were removed upstream); the client half also needed a service rename and a section-order fix. **Do not use 0.2.x or earlier on 0.1.5.**
+
+0.3.0–0.3.3 were never published separately; their changes are folded into 0.4.0.
+
+### Upgrading
+
+Installing, updating, and removing a standard plugin all modify the profile, so a DSH restart is required. To upgrade from an older version, remove first and then install:
+
+```bash
+dsh plugin --profile web remove dsh-mlx-local
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+```
+
+Then restart DSH. Model directories and other settings live in `settings.yaml` and survive the upgrade.
+
 ## Installation
 
 ### Option 1: GitHub Release tarball

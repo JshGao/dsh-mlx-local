@@ -26,6 +26,28 @@
 | 网络 | 首次使用 HF 模型时需要联网下载权重 |
 | 磁盘 | 每个 4-bit 模型约 2–6 GB |
 
+## 版本与更新
+
+当前版本 **0.4.0**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+
+> **0.4.0 是破坏性更新,有两处需要注意:**
+
+1. **移除了「随 DSH 启动自动拉起服务」。** 服务现在一律由你显式启动——设置页的「启动」按钮,或 `mlx_start` 工具。配置项 `autoStart` 同时删除;旧设置里若残留该字段会被自动忽略,不需要手动改 `settings.yaml`。
+2. **DSH 要求提高到 0.1.5-rc.1。** 插件此前面向 `0.1.0-rc.x` 编写,在 0.1.5-rc.1 上**完全无法加载**(三个具名导入已被上游移除);同时客户端有服务改名与栏目排序的修复。**0.2.x 及更早版本请勿在 0.1.5 上使用。**
+
+0.3.0–0.3.3 未单独发布,内容已并入本次 0.4.0。
+
+### 升级
+
+标准插件的安装/更新/卸载都会改 profile,需要重启 DSH 后生效。从旧版本升级时先移除再安装:
+
+```bash
+dsh plugin --profile web remove dsh-mlx-local
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+```
+
+然后重启 DSH。模型目录等设置保存在 `settings.yaml` 中,升级不会丢失。
+
 ## 安装
 
 ### 方式一:使用 GitHub Release 发布包
