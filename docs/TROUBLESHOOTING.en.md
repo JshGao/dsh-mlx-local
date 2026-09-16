@@ -32,12 +32,12 @@ Install Python 3.10–3.12:
 brew install python@3.12
 ```
 
-Then restart the plugin, or ask the agent to run `mlx_setup` in a conversation.
+Then restart the plugin, or go back to **Settings → MLX 模型** and initialize the environment again.
 
 ### Installing mlx-lm fails
 
 - Check the network and retry;
-- Delete `~/.dsh/mlx/venv` and run `mlx_setup` again;
+- Delete `~/.dsh/mlx/venv` and initialize again from the Settings page;
 - If the error mentions an incompatible Python version, install Python 3.10–3.12 and retry.
 
 ## Starting the Service
@@ -62,13 +62,13 @@ Check the recent logs in **Settings → MLX 模型**. Common causes:
 
 ### First start is slow
 
-The first use of a Hugging Face model downloads weights, which is expected. You can pre-download with `mlx_pull_model` to make later starts faster.
+The first use of a Hugging Face model downloads weights, which is expected. You can pre-download the weights into the local cache from the Settings page to make later starts faster.
 
 ## Connecting to DSH
 
 ### Local model requests report that the service is not running
 
-Start the service first in **Settings → MLX 模型**, or ask the agent to run `mlx_start`.
+Start the service first in **Settings → MLX 模型**, then retry.
 
 ### Local model requests report a model mismatch
 

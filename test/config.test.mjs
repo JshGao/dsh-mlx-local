@@ -37,3 +37,11 @@ test("resolveConfig: validates defaultModel against model catalog", () => {
 	assert.equal(config.defaultModel, "qwen3-8b");
 	assert.throws(() => resolveConfig({ defaultModel: "missing" }), /不在模型目录/);
 });
+
+test("resolveConfig: 丢弃已下线的 enableTools(工具功能已整体移除)", () => {
+	// 工具已从插件移除,但旧设置里可能残留 enableTools(schemastery 不剥离
+	// 未知键)。必须在这一层静默丢弃,否则"已下线的开关"会一路带进运行时配置。
+	const config = resolveConfig({ enableTools: true, port: 9000 });
+	assert.equal("enableTools" in config, false);
+	assert.equal(config.port, 9000);
+});

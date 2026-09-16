@@ -13,7 +13,8 @@
 - 模型目录管理:添加、移除、预下载、列出本地模型;
 - 服务异常退出检测、残留进程回收、DSH 退出时自动关闭服务;
 - 为本地 Qwen3 自动配置思考强度,主界面模型选择器可切换 Off / High;
-- 不注册额外 provider,继续使用 DSH 的“自定义提供方”接入。
+- 不注册额外 provider,继续使用 DSH 的“自定义提供方”接入;
+- 不注册系统提示词段,也**不注册任何工具**:插件只是把本地模型跑起来的基础设施,不会给任何会话增加固定请求成本。
 
 ## 环境要求
 
@@ -28,14 +29,20 @@
 
 ## 版本与更新
 
-当前版本 **0.4.0**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+当前版本 **0.4.1**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
 
-> **0.4.0 是破坏性更新,有两处需要注意:**
+> **0.4.1 是破坏性更新:插件不再注册任何工具。**
 
-1. **移除了「随 DSH 启动自动拉起服务」。** 服务现在一律由你显式启动——设置页的「启动」按钮,或 `mlx_start` 工具。配置项 `autoStart` 同时删除;旧设置里若残留该字段会被自动忽略,不需要手动改 `settings.yaml`。
+- **移除了全部 `mlx_*` 工具。** 0.4.0 的 10 个工具(`mlx_status` / `mlx_list_models` / `mlx_add_model` / `mlx_remove_model` / `mlx_pull_model` / `mlx_setup` / `mlx_start` / `mlx_stop` / `mlx_switch_model` / `mlx_chat`)整体下线:本插件只负责把本地模型跑起来,服务与模型目录的管理请在设置页完成,不再由智能体代劳。**没有需要迁移的调用**——原先让智能体做的事,在 **设置 → MLX 模型** 里都能手动完成。
+- **同时移除了系统提示词注入。** 此前插件会向每段对话注入一小段本地服务说明。现在插件对任何会话的固定请求成本都是 **0**。
+- `inject` 收敛为 `["llm"]`,不再依赖 `tools` 服务,`peerDependencies` 去掉了 `@deepseek-ai/dsh-tools`;旧设置里残留的 `enableTools` 会被自动忽略。
+
+> **从 0.3.x 及更早版本升级,还需要知道 0.4.0 的变更:**
+
+1. **移除了「随 DSH 启动自动拉起服务」。** 服务现在一律由你显式启动——设置页的「启动」按钮。配置项 `autoStart` 同时删除;旧设置里若残留该字段会被自动忽略,不需要手动改 `settings.yaml`。
 2. **DSH 要求提高到 0.1.5-rc.1。** 插件此前面向 `0.1.0-rc.x` 编写,在 0.1.5-rc.1 上**完全无法加载**(三个具名导入已被上游移除);同时客户端有服务改名与栏目排序的修复。**0.2.x 及更早版本请勿在 0.1.5 上使用。**
 
-0.3.0–0.3.3 未单独发布,内容已并入本次 0.4.0。
+0.3.0–0.3.3 未单独发布,内容已并入 0.4.0。
 
 ### 升级
 
@@ -43,7 +50,7 @@
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
 ```
 
 然后重启 DSH。模型目录等设置保存在 `settings.yaml` 中,升级不会丢失。
@@ -55,14 +62,14 @@ dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/do
 直接安装:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
 ```
 
 如果 DSH 不跟随下载跳转,先手动下载:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
 ```
 
 安装后重启 DSH。
@@ -74,7 +81,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
 ```
 
 然后重启 DSH。
@@ -98,8 +105,8 @@ dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
 ## 模型管理
 
 - 本地模型目录会保存在设置中;也可以在设置页中加载新的本地 MLX 模型。
-- 服务**不随 DSH 启动自动拉起**:每次都由你显式启动(设置页的「启动」,或 `mlx_start` 工具),以免在意想不到的时候占用内存。
-- HF 模型首次启动时会自动下载,也可以使用 `mlx_pull_model` 预下载。
+- 服务**不随 DSH 启动自动拉起**:每次都由你在设置页显式启动,以免在意想不到的时候占用内存。
+- HF 模型首次启动时会自动下载,也可以先用「预下载」把权重拉到本地缓存。
 - 切换模型会先停止旧服务再启动新服务。
 - 插件不会自动注册 `mlx-local` provider;接入统一使用 DSH 自定义 provider。
 

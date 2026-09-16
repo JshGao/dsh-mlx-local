@@ -2,7 +2,7 @@
 
 面向在本仓库上继续开发的人。安装与使用见 [README.md](README.md),故障排查见 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)。
 
-> **本机当前状态**:0.4.0 已打包并通过 `dsh plugin --profile web add` 装进 `~/.dsh/profiles/web`,profile 的 `dsh.profile.bundles` 已包含 `dsh-mlx-local`。**重启 DSH 后生效**。安装源是本地 tgz(`file:` 绝对路径),重新打包后需要重新 `add` 才会更新。
+> **本机当前状态**:0.4.1 已打包并通过 `dsh plugin --profile web add` 装进 `~/.dsh/profiles/web`,profile 的 `dsh.profile.bundles` 已包含 `dsh-mlx-local`。**重启 DSH 后生效**。安装源是本地 tgz(`file:` 绝对路径),重新打包后需要重新 `add` 才会更新。
 
 ## 环境准备
 
@@ -291,10 +291,10 @@ grep -rn "settings\.section" ~/.dsh/profiles/web/node_modules/<插件>/client/ |
 
 | 路径 | 说明 |
 |---|---|
-| `lib/index.js` | 服务端入口:插件 `apply`、配置 schema、Python venv 管理(`MlxEnvironment`)、服务生命周期(`MlxServer`)、工具注册、`/mlx/api` 回环接口 |
+| `lib/index.js` | 服务端入口:插件 `apply`、配置 schema、Python venv 管理(`MlxEnvironment`)、服务生命周期(`MlxServer`)、`/mlx/api` 回环接口 |
 | `lib/stream.js` | 本地 openai-completions 请求的流式接入:SSE 解析、消息序列化、chunk 翻译为 DSH 的 llm chunk |
 | `lib/client.js` | 浏览器端「MLX 模型」设置栏目,手写 React、无构建步骤,遵循 `__ModuleLoader__` 约定 |
-| `test/config.test.mjs` | `resolveConfig` 的默认值、校验、Qwen3 思考推断 |
+| `test/config.test.mjs` | `resolveConfig` 的默认值、校验、Qwen3 思考推断、已下线字段的丢弃 |
 | `test/stream.test.mjs` | SSE 解析、消息序列化、chunk 翻译 |
 | `cordis.patch.yml` | bundle patch,安装时把插件挂进 profile |
 | `scripts/check-runtime.mjs` | 与真实 DSH 运行时比对服务端导入与客户端服务(本文件「check:runtime」) |

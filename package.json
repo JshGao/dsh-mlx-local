@@ -1,7 +1,7 @@
 {
   "name": "dsh-mlx-local",
   "description": "在 Apple Silicon 上用 MLX 框架运行本地大模型:模型目录管理、服务启停、OpenAI 兼容 API,并优化 DSH 自定义提供方的本地思考强度选择。",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",
@@ -38,7 +38,6 @@
     "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
     "@deepseek-ai/dsh-settings": "^0.1.5-rc.1",
     "@deepseek-ai/dsh-timeout": "^0.1.5-rc.1",
-    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.2"
   },
   "dsh": {

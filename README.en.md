@@ -12,6 +12,7 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 - Detects abnormal service exits, reclaims leftover processes, and automatically stops the service when DSH exits;
 - Automatically configures thinking strength for local Qwen3 models; the model picker shows Off / High;
 - Does not register an extra provider — use DSH's **Custom Provider** as usual.
+- Registers neither a system-prompt section nor any tools: the plugin is pure infrastructure for running the local model, and adds no fixed per-request cost to any session.
 
 ## Requirements
 
@@ -26,11 +27,17 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 
 ## Version and updates
 
-Current version: **0.4.0**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+Current version: **0.4.1**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
 
-> **0.4.0 is a breaking release — two things to know:**
+> **0.4.1 is a breaking release: the plugin no longer registers any tools.**
 
-1. **Auto-start with DSH has been removed.** The service is now always started explicitly by you: the **Start** button in Settings, or the `mlx_start` tool. The `autoStart` config field is gone too; a leftover value in an older settings file is ignored automatically, so you do not need to edit `settings.yaml` by hand.
+- **All `mlx_*` tools have been removed.** The ten tools from 0.4.0 (`mlx_status` / `mlx_list_models` / `mlx_add_model` / `mlx_remove_model` / `mlx_pull_model` / `mlx_setup` / `mlx_start` / `mlx_stop` / `mlx_switch_model` / `mlx_chat`) are gone: this plugin only runs the local model, and service and model-directory management belong to the Settings page rather than to the agent. **There is nothing to migrate** — everything the agent used to do is available under **Settings → MLX 模型**.
+- **System-prompt injection has also been removed.** The plugin used to inject a short note about the local service into every conversation. It now adds **zero** fixed per-request cost to any session.
+- `inject` is now `["llm"]` — the plugin no longer depends on the `tools` service, and `peerDependencies` drops `@deepseek-ai/dsh-tools`. A leftover `enableTools` value in older settings is ignored automatically.
+
+> **Upgrading from 0.3.x or earlier? You also need the 0.4.0 changes:**
+
+1. **Auto-start with DSH has been removed.** The service is now always started explicitly by you: the **Start** button in Settings. The `autoStart` config field is gone too; a leftover value in an older settings file is ignored automatically, so you do not need to edit `settings.yaml` by hand.
 2. **DSH requirement raised to 0.1.5-rc.1.** The plugin was written against the `0.1.0-rc.x` line and **failed to load at all** on 0.1.5-rc.1 (three named imports were removed upstream); the client half also needed a service rename and a section-order fix. **Do not use 0.2.x or earlier on 0.1.5.**
 
 0.3.0–0.3.3 were never published separately; their changes are folded into 0.4.0.
@@ -41,7 +48,7 @@ Installing, updating, and removing a standard plugin all modify the profile, so 
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
 ```
 
 Then restart DSH. Model directories and other settings live in `settings.yaml` and survive the upgrade.
@@ -53,14 +60,14 @@ Then restart DSH. Model directories and other settings live in `settings.yaml` a
 Install directly:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
 ```
 
 If DSH does not follow redirects, download it manually first:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.0/dsh-mlx-local-0.4.0.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
 ```
 
 Restart DSH after installing.
@@ -72,7 +79,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.4.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
 ```
 
 Then restart DSH.
@@ -96,8 +103,8 @@ Then restart DSH.
 ## Model Management
 
 - Local model directories are saved in Settings; you can also load another local MLX model directory from the Settings page.
-- The service is **never started automatically with DSH**: you start it explicitly each time (the **Start** button in Settings, or the `mlx_start` tool), so it never claims memory behind your back.
-- Hugging Face models are downloaded automatically on first start; you can also pre-download them with `mlx_pull_model`.
+- The service is **never started automatically with DSH**: you start it explicitly from the Settings page each time, so it never claims memory behind your back.
+- Hugging Face models are downloaded automatically on first start; you can also pre-download the weights into the local cache from the Settings page.
 - Switching models stops the old service first, then starts the new one.
 - The plugin does not register an `mlx-local` provider; use DSH's custom provider for access.
 
