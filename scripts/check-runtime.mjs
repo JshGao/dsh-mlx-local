@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 校验插件与真实 DSH 运行时的兼容性。三类检查,全部以目标运行时为准:
+ * 校验插件与真实 DSH 运行时的兼容性。六类检查,全部以目标运行时为准:
  *
  * 1. 服务端具名导入:lib/*.js 里 `import { X } from "@deepseek-ai/..."` 的每个 X
  *    是否真的被导出。ESM 的具名导入缺失是**链接期**错误,插件会直接加载失败。
@@ -10,6 +10,14 @@
  *    `ctx.tools.register` / `sctx.settings.installSection` / `ctx.uiWorkspace.pickDirectory`
  *    都走这条。**服务存在 ≠ 方法存在**(例如 `workspaces` 与 `uiWorkspace` 并存),
  *    所以这一层不能省。
+ * 4. 订阅事件:`ctx.on("事件名", …)` 订阅的事件,运行时里是否确有包发出。事件改名
+ *    不报错,订阅方只是永远不再触发。
+ * 5. 界面槽:客户端 `ctx.slots.inject("槽名", …)` 的槽名,运行时里是否有别的包在用。
+ *    槽名没有中心注册表,官方包靠各自 `slots.inject` 声明;改名的后果是注册
+ *    **静默落空**——设置页上整个栏目消失,而控制台一行错都不报。
+ * 6. 客户端模块图:`package.json` 的 `dsh.client.inject` 里每个包名,是否真的在目标
+ *    运行时的客户端模块图内(包存在**且**自带 `dsh.client` 声明)。host 只把带该声明
+ *    的包编进图,图里没有的名字在浏览器端被静默跳过,顺序保证悄悄失效。
  *
  * 背景:`npm test` 只加载本仓库的 node_modules,发现不了上述漂移——插件最初对着
  * `0.1.0-rc.6` 写,却在 `0.1.5-rc.1` 上炸了两次(缺失导出、改名服务),都是本地全绿。
@@ -282,6 +290,95 @@ function subscribedEvents(files) {
 	return subscribed;
 }
 
+/** 本仓库 `ctx.slots.inject("槽名", …)` 声明的界面槽及其出处。 */
+function declaredSlotNames() {
+	const source = readSource("client.js");
+	const names = new Map();
+	for (const match of source.matchAll(/\.slots\.inject\(\s*"([^"]+)"/g)) {
+		const origins = names.get(match[1]) ?? new Set();
+		origins.add("client.js");
+		names.set(match[1], origins);
+	}
+	return names;
+}
+
+/**
+ * 收集目标运行时里每个界面槽的名字 → 使用它的包。
+ *
+ * 槽没有中心注册表:官方包(settings 各栏目、agent-preset 等)各自用
+ * `slots.inject("槽名", …)` 领用,所以"运行时里有没有别的包用这个名字"
+ * 就是槽是否还存在的唯一判据。
+ * @returns 槽名 → 包名集合。
+ */
+function collectRuntimeSlots(modulesRoot) {
+	const scopeDir = join(modulesRoot, SCOPE);
+	const slots = new Map();
+	let packages;
+	try {
+		packages = readdirSync(scopeDir);
+	} catch {
+		return slots;
+	}
+	for (const pkg of packages) {
+		const file = join(scopeDir, pkg, "lib", "client.js");
+		if (!existsSync(file)) continue;
+		const source = stripComments(readFileSync(file, "utf8"));
+		for (const match of source.matchAll(/\.slots\.inject\(\s*"([^"]+)"/g)) {
+			const owners = slots.get(match[1]) ?? new Set();
+			owners.add(pkg);
+			slots.set(match[1], owners);
+		}
+	}
+	return slots;
+}
+
+/** 读取本仓库 package.json 的 `dsh.client` 声明。 */
+function declaredClientManifest() {
+	const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+	return pkg.dsh?.client ?? {};
+}
+
+/**
+ * 校验 `dsh.client.inject` 的每个包名确实落在目标运行时的客户端模块图内。
+ *
+ * 两种失败形态都不报错、只在浏览器里静默跳过(`if (dependency !== void 0)`):
+ * 包根本没装,或者装了但没有 `dsh.client` 声明因而不被编进图。后者尤其隐蔽——
+ * `@deepseek-ai/dsh-client-ui-slots` 就属于这类:它只是官方包的 devDependency,
+ * 自身不带 dsh.client,写进 inject 永远不会生效(0.4.1 及以前如此)。
+ * @returns 失败条数。
+ */
+function checkClientInjectGraph(modulesRoot, names) {
+	console.log("\ndsh.client.inject 的模块图存在性\n");
+	if (names.length === 0) {
+		console.log("(package.json 未声明 dsh.client.inject)");
+		return 0;
+	}
+	let failures = 0;
+	for (const name of names) {
+		const manifest = name.startsWith(SCOPE)
+			? join(modulesRoot, SCOPE, name.slice(SCOPE.length), "package.json")
+			: join(modulesRoot, name, "package.json");
+		if (!existsSync(manifest)) {
+			failures += 1;
+			console.log(`✗ ${name} — 目标运行时里没有这个包,注入会被静默跳过`);
+			continue;
+		}
+		let decl;
+		try {
+			decl = JSON.parse(readFileSync(manifest, "utf8")).dsh?.client;
+		} catch {
+			decl = undefined;
+		}
+		if (decl === undefined) {
+			failures += 1;
+			console.log(`✗ ${name} — 包存在但没有 dsh.client 声明,不进客户端模块图,注入会被静默跳过`);
+			continue;
+		}
+		console.log(`✓ ${name} (platform=${decl.platform ?? "?"})`);
+	}
+	return failures;
+}
+
 /**
  * 校验半边代码:声明的服务存在、调用的方法存在。
  * @returns 失败条数。
@@ -372,8 +469,23 @@ for (const [name, origins] of [...subscribedEvents(serverFiles)].sort(([a], [b])
 	console.log(`    订阅位置: ${[...origins].join(", ")}`);
 }
 
+failures += checkClientInjectGraph(modulesRoot, declaredClientManifest().inject ?? []);
+
+console.log("\n界面槽\n");
+const runtimeSlots = collectRuntimeSlots(modulesRoot);
+for (const [name, origins] of [...declaredSlotNames()].sort(([a], [b]) => a.localeCompare(b))) {
+	const owners = runtimeSlots.get(name);
+	if (owners !== undefined) {
+		console.log(`✓ ${name} — 目标运行时中 ${[...owners].sort().join(", ")} 也在用该槽`);
+		continue;
+	}
+	failures += 1;
+	console.log(`✗ ${name} — 目标运行时里没有任何包使用该槽(槽名改了,注册会静默落空)`);
+	console.log(`    领用位置: ${[...origins].join(", ")}`);
+}
+
 if (failures > 0) {
 	console.log(`\n${failures} 处不兼容;插件在目标运行时上会加载失败、报错或静默失效。`);
 	process.exit(1);
 }
-console.log("\n服务端导入、服务名、服务方法与订阅事件在目标运行时中全部存在。");
+console.log("\n服务端导入、服务名、服务方法、订阅事件、客户端注入与界面槽在目标运行时中全部存在。");

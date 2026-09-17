@@ -36,14 +36,16 @@ npm run check:runtime  # 与真实 DSH 运行时比对服务端导入与客户�
 
 ### check:runtime
 
-`scripts/check-runtime.mjs` 做四类检查,都以**真实 DSH 运行时**为准:
+`scripts/check-runtime.mjs` 做六类检查,都以**真实 DSH 运行时**为准:
 
 1. **服务端具名导入**:扫描 `lib/*.js` 里所有 `@deepseek-ai/*` 的具名导入,逐个到目标运行时的同名包里确认导出存在。这类缺失是 ESM **链接期**错误,插件会直接加载失败。
 2. **服务名**:服务端 `export const inject` 与客户端 `const inject` 声明的每个服务,运行时里是否真有插件提供。
 3. **服务方法**:`<接收者>.<服务>.<方法>(...)` 里的方法,是否出现在提供该服务的包里。
 4. **订阅的事件**:`ctx.on("事件名")` 订阅的事件,运行时里是否确有包发出。
+5. **界面槽**:`ctx.slots.inject("槽名", …)` 的槽名,运行时里是否还有别的包在用。
+6. **客户端模块图**:`package.json` 的 `dsh.client.inject` 里的每个包名,是否真的在客户端模块图内(包存在**且**自带 `dsh.client` 声明)。
 
-第 2、3 类靠两个来源对齐:从运行时各 bundle 的 `super(ctx, "<名>")` 收集服务清单(服务端扫 `lib/index.js`,客户端扫 `lib/client.js`),再从本仓库代码里抽出服务声明与调用。第 4 类收集 `emit` / `parallel` / `serial` / `bail` / `waterfall` 五种派发的事件名。
+第 2、3 类靠两个来源对齐:从运行时各 bundle 的 `super(ctx, "<名>")` 收集服务清单(服务端扫 `lib/index.js`,客户端扫 `lib/client.js`),再从本仓库代码里抽出服务声明与调用。第 4 类收集 `emit` / `parallel` / `serial` / `bail` / `waterfall` 五种派发的事件名。第 5、6 类是 0.4.2 补的,专治两种**静默失效**,机制见下文「第四轮」。
 
 扫描前会先剥离注释(状态机实现,不是正则——代码里有 `"http://x"`),否则注释里提到的 API 名字会被当成真实调用。
 
@@ -57,22 +59,49 @@ DSH_RUNTIME_ROOT=/path/to/node_modules npm run check:runtime
 
 **改了 `lib/` 里的导入、服务调用、`inject` 声明或事件订阅之后一定要跑它。** 单测只加载本仓库的 `node_modules`,发现不了版本漂移。
 
-三点局限:
+五点局限:
 
 - 方法判据是「方法名在提供该服务的包里出现过」,偏宽松:宁愿漏报也不误报。它抓不住「同一文件里两个服务、方法名恰好撞上」;真要精确追踪得跑起浏览器。
 - 只认识通过 `super(ctx, "<名>")` 注册的服务。若某个服务改用别的方式注册,会被当成"无人提供"而**误报**——真遇到时先确认注册方式再判断。
 - 事件检查只看**本插件订阅**的事件,不校验回调签名。签名错了(例如 waterfall 少了 `next` 参数)只能靠实测。
+- 第 5、6 类只判**存在性**,不判**顺序**:名字在图里、槽有别人在用,不等于插件注册的那一刻它们一定已就绪。真正的时序保证来自 cordis 的服务注入(`inject = ["slots", "uiWorkspace"]`),检查器只负责拦住"名字写错"这一类。
+- 第 5 类的判据是「运行时里有没有别的包用这个槽名」。将来若新增**自家私有**的槽,它会误报——届时得把该槽的领用方也纳入判据。
 
 ### 前向兼容:对第二个运行时跑一遍
 
-`latest` 之外的版本(例如 npm `next` 标签)可以在工作区内单独装一份,不污染开发依赖:
+`latest` 之外的版本(例如 npm `next` / `alpha` 标签)可以在工作区内单独装一份,不污染开发依赖:
 
 ```bash
 npm install --prefix .dshtest-rc2 --cache ./.npm-cache @deepseek-ai/dsh@<版本>
 node scripts/check-runtime.mjs .dshtest-rc2/node_modules
 ```
 
-`280MB` 左右,用完删掉即可(`.dshtest*/` 已在 `.gitignore` 中)。0.3.2 就是靠这个确认了对 `0.1.5-rc.2` 同样兼容。
+`280MB` 左右,用完删掉即可(`.dshtest*/` 已在 `.gitignore` 中)。0.3.2 靠这个确认了对 `0.1.5-rc.2` 同样兼容,0.4.2 靠它确认了对 `0.1.6-alpha.2` 同样兼容。
+
+装 **alpha** 版本有两个坑要先知道:
+
+- npm 会报 `ERESOLVE`。插件的 peer 范围 `^0.1.5-rc.1` 按 semver 预发布规则不匹配 `0.1.6-alpha.2`——但**官方包同样如此**(它们写 `^0.1.5-rc.2`),这是规则固有限制,不是插件写错。加 `--legacy-peer-deps` 即可。
+- 装出来是**混合版本树**:`dsh@0.1.6-alpha.2` 的依赖写 `^0.1.5-rc.2`,于是多数子包仍解析到 `0.1.5-rc.2`。想验"全量新版本",得显式点名升级:
+
+```bash
+npm install --prefix .dshtest-rc2 --legacy-peer-deps \
+  @deepseek-ai/dsh-llm@0.1.6-alpha.2 @deepseek-ai/dsh-timeout@0.1.6-alpha.2 \
+  @deepseek-ai/dsh-settings@0.1.6-alpha.2 @deepseek-ai/dsh-host-webserver@0.1.6-alpha.2 \
+  @deepseek-ai/dsh-client-ui-renderer@0.1.6-alpha.2
+```
+
+两种组合都值得各跑一次——它们覆盖的代码路径不同。
+
+**静态扫描之外,再补一次真实加载。** `check:runtime` 只验名字在不在,不验运行时行为。把插件装进目标运行时后可以真的 import 它、把 `apply` 跑起来:
+
+```bash
+cd .dshtest-rc2 && npm install ../../dsh-mlx-local-<版本>.tgz --legacy-peer-deps
+node -e 'import("dsh-mlx-local").then(m => console.log(m.name, m.inject))'
+```
+
+0.4.2 的复核就是这么做的,三项都过:真实 ESM 链接(确认解析到目标版本的 `dsh-llm`)、`apply(ctx)` 在真实 cordis Context 上挂载冒烟、按 `__ModuleLoader__` 约定注入假 `window` 后调用客户端 factory。
+
+判读结论时记住:**peer 范围不匹配 alpha 是生态常态,不影响加载**。DSH 只用 peer 的**包名**建模块解析回退图(`dsh-app-boot` 的 `profileDependencyNames` 取 `dependencies` + `peerDependencies` 的键),**不校验版本范围**;真正决定成败的是第 1 类检查(具名导入)。
 
 ## 开发回路
 
@@ -248,20 +277,39 @@ ctx.effect(() => () => { /* 清理 */ }, "标签(用于 getEffects() 诊断)");
 
 官方插件也一律用 `ctx.effect`。此前之所以没暴露,是因为插件还有 `process.once("exit")` 与外部监督脚本两层兜底——但「停用插件/热插拔」这种不退出进程的路径,当时是没人回收模型服务的。
 
+**第四轮(0.4.2):客户端注入写了个不在图里的包**
+
+这一轮是复核 DSH `0.1.6-alpha.2` 时顺手抓出来的,和事件那条同源——**同样是静默失效**。`package.json` 的 `dsh.client.inject` 原本写着 `@deepseek-ai/dsh-client-ui-slots`,但该包**从来不在客户端模块图里**:它只出现在官方包的 `devDependencies` 中,自身没有 `dsh.client` 声明,而 host 只把带该声明的包编进图。浏览器端对图里没有的名字直接跳过:
+
+```js
+// dsh-client-modules/lib/client.js —— 0.1.5-rc.2 与 0.1.6-alpha.2 逐字相同
+for (const packageName of row.inject) {
+	const dependency = this.graphRows.get(packageName);
+	if (dependency !== void 0) await this.arriveGraphRow(dependency, [], visited); // 没找到就跳过
+}
+```
+
+于是这个注入从写下那天起就没生效过,而且一行错都不报。正确名字是 `@deepseek-ai/dsh-client-ui-renderer`,即 `slots` 服务的真正提供者——需要 slots 能力的官方包(`dsh-client-ui-chat` / `-locale` / `-resources` 等)都是这么 inject 的。
+
+**为什么一直没出事**:顺序其实被两条路兜住了——`dsh-client-ui-workspace` 的 inject 里本来就含 `renderer`(传递依赖),加上 cordis 的服务注入 `inject = ["slots", "uiWorkspace"]` 会等槽就绪。所以修的是**显式保证**,不是可见故障。
+
+教训是:**`inject` 里写的名字,不代表它真的存在**。`check:runtime` 因此加了第 6 类检查盯这件事。同一轮还加了第 5 类(界面槽名),它是预防性的——槽名若改,设置页整个栏目消失而控制台全干净,和 `dispose` 事件是同一类坑。两条新检查写完都立刻做了回归(故意改错,确认退出码为 1),否则很容易写出一条永远通过的检查。
+
 现在版本要求是 `^0.1.5-rc.1`,并且**只支持这一条线**:旧线需要 `CallId` 和模块级 `installSettingsSection`,与新版互斥。
 
 ## 设置页栏目排序
 
-`settings.section` 槽按 `order` **升序**排列。官方四个栏目在 `0.1.5-rc.1` 与 `0.1.5-rc.2` 上完全一致:
+`settings.section` 槽按 `order` **升序**排列。官方栏目在 `0.1.5-rc.x` 上是四个,`0.1.6-alpha.2` 增至五个(下表为实测值):
 
-| order | id | 提供者 |
-|---|---|---|
-| 0 | `general` | `dsh-client-ui-settings-general` |
-| 10 | `models` | `dsh-client-ui-settings-models` |
-| 15 | `plugins` | `dsh-client-ui-settings-plugins` |
-| 20 | `agent-presets` | `dsh-client-ui-agent-preset` |
+| order | id | 提供者 | 起始版本 |
+|---|---|---|---|
+| 0 | `general` | `dsh-client-ui-settings-general` | 0.1.5 |
+| 10 | `models` | `dsh-client-ui-settings-models` | 0.1.5 |
+| 15 | `plugins` | `dsh-client-ui-settings-plugins` | 0.1.5 |
+| 20 | `agent-presets` | `dsh-client-ui-agent-preset` | 0.1.5 |
+| 25 | `archived-sessions` | `dsh-client-ui-settings-unarchive-sessions` | **0.1.6** |
 
-**第三方插件应从 30 起排**,让官方栏目始终在最前:`dshmarket` 用 40,本插件用 30——留出间隔是为了避免并列时先后取决于注册顺序。
+**第三方插件应从 30 起排**,让官方栏目始终在最前:`dshmarket` 用 40,本插件用 30——留出间隔是为了避免并列时先后取决于注册顺序。官方最大值自 0.1.6 起升到 25,本插件的 30 依旧排在最后,无并列。
 
 查当前运行时的实际排序(改 order 前后都值得跑一次):
 

@@ -22,14 +22,20 @@
 |---|---|
 | 硬件 | Apple Silicon(M 系列)Mac |
 | 系统 | macOS 13 或更高 |
-| DSH | DeepSeek Harness 0.1.5-rc.1 及可用的 `dsh` 命令 |
+| DSH | DeepSeek Harness 0.1.5-rc.1 或更高(已实测至 0.1.6-alpha.2)及可用的 `dsh` 命令 |
 | Python | 3.9–3.13,建议 3.10–3.12;未安装时插件会给出 `brew install python@3.12` 提示 |
 | 网络 | 首次使用 HF 模型时需要联网下载权重 |
 | 磁盘 | 每个 4-bit 模型约 2–6 GB |
 
 ## 版本与更新
 
-当前版本 **0.4.1**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+当前版本 **0.4.2**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+
+> **0.4.2 是针对 DSH 0.1.6-alpha.2 的兼容性复核,无破坏性变更。**
+
+- 已实测在 **DSH 0.1.6-alpha.2**(npm `alpha` 标签)与 0.1.5-rc.2 上均可正常加载:具名导入、服务与方法、`llm/stream` 事件、客户端槽与 `__ModuleLoader__` 契约**全部未变**,无需迁移。
+- 修掉一处**一直静默失效**的客户端注入:`dsh.client.inject` 原写的 `@deepseek-ai/dsh-client-ui-slots` 从来不在客户端模块图内(它只是官方包的 devDependency,自身没有 `dsh.client` 声明),而浏览器端对图里没有的名字会直接跳过、不报错。已改为 `slots` 服务的真正提供者 `@deepseek-ai/dsh-client-ui-renderer`。此前「MLX 模型」栏目能正常显示是靠传递依赖与 cordis 服务注入兜住,故**升级后无可见行为变化**。
+- 装 `0.1.6-alpha.x` 时 npm 会报 `ERESOLVE`——这是预发布 semver 规则的固有行为,**官方包同样如此**,用 `--legacy-peer-deps` 绕过即可;转正后的 `0.1.6` 不受影响。
 
 > **0.4.1 是破坏性更新:插件不再注册任何工具。**
 
@@ -50,7 +56,7 @@
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
 ```
 
 然后重启 DSH。模型目录等设置保存在 `settings.yaml` 中,升级不会丢失。
@@ -62,14 +68,14 @@ dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/do
 直接安装:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
 ```
 
 如果 DSH 不跟随下载跳转,先手动下载:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
 ```
 
 安装后重启 DSH。
@@ -81,7 +87,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
 ```
 
 然后重启 DSH。

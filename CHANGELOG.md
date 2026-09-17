@@ -1,5 +1,25 @@
 # 更新记录
 
+## 0.4.2
+
+本版是针对 DSH **0.1.6-alpha.2**(npm `alpha` 标签)的兼容性复核:插件在该版本上**可以正常加载**,API 接触点无一处失效。复核同时暴露并修掉了一个一直存在、却因静默跳过而从未报错的客户端注入缺陷。
+
+- **修正 `dsh.client.inject` 的模块名**(缺陷修复)。第三个依赖原本写的是 `@deepseek-ai/dsh-client-ui-slots`,但该包**不在客户端模块图内**——它只出现在官方包的 `devDependencies` 里,自身没有 `dsh.client` 声明,host 不会把它编进图。浏览器端对图里没有的名字是**静默跳过**(`if (dependency !== void 0)`),所以这个注入从写下那天起就没生效过,也从不报错。
+  - 改为 `@deepseek-ai/dsh-client-ui-renderer`,即 `slots` 服务的真正提供者,与官方惯例一致(需要 slots 能力的官方包如 `dsh-client-ui-chat` / `-locale` / `-resources` 都是这么 inject 的)。
+  - 实际影响有限:加载顺序此前靠 `dsh-client-ui-workspace` → `renderer` 的传递注入链,以及 cordis 的服务注入(`inject = ["slots", "uiWorkspace"]`)兜住,「MLX 模型」栏目一直能正常显示。这次修的是**显式保证**,不是可见故障。
+  - 列表改为字母序,与官方包写法一致。
+- **`check:runtime` 从四类检查扩展到六类**(工具增强)。新增两类此前完全无覆盖的漂移,二者都是"改名不报错、只是静默失效":
+  - **界面槽**:比对 `ctx.slots.inject("槽名", …)` 的槽名是否还有别的包在用。槽没有中心注册表,官方包各自领用,"有没有别人用这个名字"是槽是否存在的唯一判据。槽名若改,设置页整个栏目消失,而控制台一行错都不报。
+  - **客户端模块图**:比对 `package.json` 的 `dsh.client.inject` 里每个包名是否真的在图内(包存在**且**自带 `dsh.client` 声明)。上面那个 `dsh-client-ui-slots` 缺陷正是被这条新检查抓出来的;写完立刻用它做了回归——确认能报错(退出码 1),而不是一条永远通过的检查。
+- **0.1.6-alpha.2 逐项核对结果**(六类检查在 `0.1.6-alpha.2` 全量树与 `0.1.5-rc.2` 上**全部通过**):
+  - 具名导入不止静态存在,还在新运行时上**真实 import 链接成功**:`dsh-llm` 的 `EMPTY_RESPONSE_CODE` / `LlmError` / `ToolCallId` / `attributionHeaders` / `contentHasImage`,`dsh-timeout` 的 `MAX_TIMER_DELAY_MS` / `idleWatchdog` / `timeoutOf`。该版 `dsh-llm` 移除了 `offloadedImagePrefixCount` / `offloadRequestImagesWithPolicy`、新增 `IMAGE_OFFLOAD_REQUIRED_CODE` / `projectOffloadedImages` / `requiredImageOffload`,插件均未使用。
+  - `llm/stream` 仍是 waterfall `(options, next)`,派发点未变;`settings.installSection(owner, ns, schema, entry, hooks)` 签名一字未改;`webServer.register` 所在的 `dsh-host-webserver` 两版**逐字节相同**。
+  - 客户端 `slots._register` 实现逐行一致(新版只是多了个 `_registerFactory`);`__ModuleLoader__.load({id, factory})` 外部契约未变(内部存储由 `factory` 改为 `{factory, rev}`,对插件透明)。
+  - 槽 `settings.section` 仍在;官方栏目 order 最大值由 20 变为 25(新增 `dsh-client-ui-settings-unarchive-sessions`),插件的 `order: 30` 依旧排在最后,无并列。
+  - 客户端 bundle 按约定**真实求值**通过(注入假 `window.__ModuleLoader__` 并实际调用 factory);`apply(ctx)` 在真实 cordis Context 上挂载冒烟通过。
+- **peerDependencies 范围保持不变**(`^0.1.5-rc.1`)。它在 semver 上**不匹配** `0.1.6-alpha.2`,装 alpha 时 npm 会报 `ERESOLVE`——但这是**整个 DSH 生态的普遍现象**:官方包同样写 `^0.1.5-rc.2`,一样不匹配,属于预发布规则的固有行为,转正后的 `0.1.6` 会自动匹配。且 DSH 加载插件时只用 peer 的**包名**建模块解析回退图(`dsh-app-boot` 的 `profileDependencyNames` 取 `dependencies` + `peerDependencies` 的键),**不校验版本范围**,所以不影响运行。alpha 阶段的 `ERESOLVE` 用 `--legacy-peer-deps` 绕过即可。
+- 附注:`0.1.6-alpha.2` 自身是**混合版本树**——它的依赖写 `^0.1.5-rc.2`,导致多数子包仍解析到 `0.1.5-rc.2`。混合树与强制全量 0.1.6-alpha.2 两种组合都验过,均通过。
+
 ## 0.4.1
 
 本版把插件**收回"基础设施"定位**:它只负责把本地模型跑起来,**不注册系统提示词段,也不注册任何工具**。装了这个插件,任何会话都不会因此多付一个 token。

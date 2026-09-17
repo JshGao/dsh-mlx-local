@@ -20,14 +20,20 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 |---|---|
 | Hardware | Apple Silicon (M-series) Mac |
 | OS | macOS 13 or later |
-| DSH | DeepSeek Harness 0.1.5-rc.1 and a working `dsh` command |
+| DSH | DeepSeek Harness 0.1.5-rc.1 or newer (verified up to 0.1.6-alpha.2) and a working `dsh` command |
 | Python | 3.9–3.13, recommended 3.10–3.12; the plugin suggests `brew install python@3.12` when missing |
 | Network | Internet is needed the first time to download Hugging Face weights |
 | Disk | About 2–6 GB per 4-bit model |
 
 ## Version and updates
 
-Current version: **0.4.1**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+Current version: **0.4.2**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+
+> **0.4.2 is a compatibility re-check against DSH 0.1.6-alpha.2 — no breaking changes.**
+
+- Verified to load correctly on both **DSH 0.1.6-alpha.2** (the npm `alpha` tag) and 0.1.5-rc.2: named imports, services and methods, the `llm/stream` event, client slots and the `__ModuleLoader__` contract are all **unchanged**, so there is nothing to migrate.
+- Fixed a client injection that had been **silently inert all along**: `dsh.client.inject` listed `@deepseek-ai/dsh-client-ui-slots`, which is never part of the client module graph (it is only a devDependency of official packages and carries no `dsh.client` declaration of its own), and the browser side skips unknown graph names without any error. It now lists `@deepseek-ai/dsh-client-ui-renderer`, the actual provider of the `slots` service. The "MLX 模型" section kept working only because a transitive dependency plus cordis service injection covered for it, so **there is no visible behaviour change when upgrading**.
+- Installing on `0.1.6-alpha.x` makes npm report `ERESOLVE` — an inherent consequence of pre-release semver rules, and **official packages behave the same way**. Use `--legacy-peer-deps`; the promoted `0.1.6` release is unaffected.
 
 > **0.4.1 is a breaking release: the plugin no longer registers any tools.**
 
@@ -48,7 +54,7 @@ Installing, updating, and removing a standard plugin all modify the profile, so 
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
 ```
 
 Then restart DSH. Model directories and other settings live in `settings.yaml` and survive the upgrade.
@@ -60,14 +66,14 @@ Then restart DSH. Model directories and other settings live in `settings.yaml` a
 Install directly:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
 ```
 
 If DSH does not follow redirects, download it manually first:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.1/dsh-mlx-local-0.4.1.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
 ```
 
 Restart DSH after installing.
@@ -79,7 +85,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.4.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
 ```
 
 Then restart DSH.
