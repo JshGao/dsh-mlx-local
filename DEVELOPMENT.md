@@ -295,7 +295,41 @@ for (const packageName of row.inject) {
 
 教训是:**`inject` 里写的名字,不代表它真的存在**。`check:runtime` 因此加了第 6 类检查盯这件事。同一轮还加了第 5 类(界面槽名),它是预防性的——槽名若改,设置页整个栏目消失而控制台全干净,和 `dispose` 事件是同一类坑。两条新检查写完都立刻做了回归(故意改错,确认退出码为 1),否则很容易写出一条永远通过的检查。
 
-现在版本要求是 `^0.1.5-rc.1`,并且**只支持这一条线**:旧线需要 `CallId` 和模块级 `installSettingsSection`,与新版互斥。
+**第五轮(0.5.0):设置架构重写,插件半失效**
+
+DSH `0.1.7-alpha.2` 起 `dsh-settings` 换掉了整套设置模型,插件的三个调用点直接失效,而且**一个错都不报**:
+
+| 旧 API(≤0.1.6) | 0.1.7+ | 静默后果 |
+|---|---|---|
+| `settings.installSection(ctx, ns, Config, config, hooks)` | 删除;改为扫描插件 `Config` 中带 `.volatile()` 的字段 | 设置页不显示本插件任何字段 |
+| `settings.get(ns)` | 删除;改用 `settings.describe()` | 思考强度补全抛错被 `catch` 吞掉,重试 30 次后放弃 |
+| `settings.update(自拟 ns, patch)` | 第一个参数改为 **profile entry id** | 写入找不到条目 |
+
+最隐蔽的一环在启动链:`scheduleBoot()` **只**被 `installSection` 的 `onChange` 回调调用。方法一抛错,回调中断,启动链(接管外部服务、端口后台监控、思考强度补全)就再也不会执行。运行时唯一的表现,是日志少了几行:
+
+```
+9/26 21:50 之前  → boot: 启动链执行 / adopt 完成 / 启动后台端口监控   (3 条)
+9/27 20:06 之后  → 只剩 apply: dispose 注册完成                      (1 条)
+```
+
+**新架构的要点**:
+
+- **`.volatile()` 是设置页的入场券**。`volatileForm()` 会跳过没有任何 volatile 字段的条目,`write()` 也会以 `has no volatile fields` 拒绝写入——两件事都只表现为"设置页什么都没有"。而且 `volatile()` 是 **schemastery 3.18.3** 才引入的,写在 3.18.2 上会直接抛 `volatile is not a function`。
+- **volatile 字段在 config 里不是值,是引用**:形态为 `{ get(), [Symbol.for("cosmokit.volatile.write")](v) }`,读取前必须递归解包,否则 `resolveConfig` 会把 `port` 当成对象、`models` 当成非数组。识别用的 symbol 与 cosmokit 共用(`Symbol.for` 是全局注册),不必新增依赖。
+- **缓存不能按对象标识判断**。设置页改动时 loader 是**原地写回**引用内部的值,config 对象自始至终是同一个,`source !== lastSource` 永远为假——必须比较解包后的内容。
+- **命名空间是 loader 条目 id**,取自 `ctx.fiber.entry?.options.id`。本插件 `cordis.patch.yml` 里声明的是 `dsh-mlx-local`,与包内旧常量 `mlx-local` 并不一致,硬编码必然写错条目。
+- **变更通知走 `loader/volatile-update`**,由 `cordis-plugin-loader` 派发到插件的 `fiber.ctx`;官方插件(`dsh-experimental-speech-to-text`、`dsh-llm-deepseek`)同样订阅它。
+- **启动链不再需要等设置层**。0.1.7+ 的 config 由 loader 同步传入,不像 `settings.yaml` 时代要等异步合并,所以 apply 末尾直接排一次即可。
+
+**同时暴露了检查器的三处漏检**——这次的不兼容最初被 `check:runtime` 报成了全绿:
+
+1. **服务注册正则写死了参数名**:`super(ctx, …)` 匹配不到 0.1.7 的 `super(ownerContext, "settings")`,整个服务从清单里消失。后果不是报错,而是依赖它的检查被静默跳过。
+2. **`ctx.inject([...])` 这类运行时注入没被收集**:只查了顶层 `export const inject`。
+3. **别名调用漏检**:`settingsService = sctx.settings` 之后的两段式 `settingsService.get(...)` 抽取不到。
+
+方法存在性的判据也从 `includes("get(")` 收紧为「方法名前面不是点」——旧判据会被 `revisions.get(` 这类 Map 调用骗过,这正是 `get` 被漏掉的原因。
+
+第五轮之后版本要求是 `^0.1.7-rc.1 || ^0.2.0-rc.1`,**只支持 0.1.7 及以后**:旧线依赖的 `installSection` 与 `get` 已被上游删除,与新版互斥,一套代码无法同时兼容。两条版本线要各自写出范围——预发布 semver 规则下,单一范围匹配不了 `0.1.7-rc.x` 与 `0.2.0-rc.1` 两者。
 
 ## 设置页栏目排序
 

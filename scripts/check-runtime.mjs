@@ -188,6 +188,11 @@ function collectRequiredSymbols(files) {
  * 一个服务可能被多个包提供(可替换实现),所以按名合并、方法取并集。
  * 方法是否存在用「提供该服务的包里出现过 `<方法>(`」判定:偏宽松,宁可漏报
  * 也不误报。它抓不住的只有「同文件里两个服务、方法名恰好撞上」。
+ *
+ * 注册形状是 `super(<ctx 变量>, "<服务名>")`,**第一个参数名不固定**:
+ * 0.1.7 起 `dsh-settings` 写的是 `super(ownerContext, "settings")`。把参数名
+ * 写死成 `ctx` 会让整个服务从清单里消失,而"消失"的后果不是报错,是依赖它的
+ * 检查被静默跳过——0.1.7 移除 `installSection` 时就是这么漏过去的。
  * @param fileRole - `index.js`(服务端)或 `client.js`(浏览器端)。
  * @returns 服务名 → { packages, sources }。
  */
@@ -204,7 +209,7 @@ function collectServices(modulesRoot, fileRole) {
 		const file = join(scopeDir, pkg, "lib", fileRole);
 		if (!existsSync(file)) continue;
 		const source = readFileSync(file, "utf8");
-		for (const match of source.matchAll(/super\(ctx,\s*"([A-Za-z_$][\w$]*)"\)/g)) {
+		for (const match of source.matchAll(/super\(\s*[A-Za-z_$][\w$]*\s*,\s*"([A-Za-z_$][\w$]*)"\s*\)/g)) {
 			const entry = services.get(match[1]) ?? { packages: new Set(), sources: [] };
 			entry.packages.add(pkg);
 			entry.sources.push(source);
@@ -222,20 +227,81 @@ function declaredServices(file) {
 	return [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]);
 }
 
-/** 抽出 `<接收者>.<服务>.<方法>(` 三元调用,只保留中间名确实是运行时服务的那些。 */
-function serviceCalls(files, services) {
+/**
+ * 收集插件代码里 `ctx.inject(["服务", …], …)` 表达的服务依赖,按文件归组。
+ *
+ * 这类**运行时注入**必须和顶层 `export const inject` 分开收集:后者只约束插件
+ * 自身的挂载条件,前者才是 apply 内部真正等待的服务。0.1.7 把
+ * `settings.installSection` 删掉后,`ctx.inject(["settings"])` 依然"满足"、
+ * 回调照常执行,只是执行到一半抛 TypeError——不把这层声明纳入检查就看不见。
+ *
+ * 只认数组形式。客户端的 `ctx.slots.inject("槽名", …)` 是槽注入,参数是字符串,
+ * 不会被误收。
+ * @returns 文件名 → 服务名数组。
+ */
+function runtimeInjectedServices(files) {
+	const byFile = new Map();
+	for (const file of files) {
+		const source = readSource(file);
+		const names = new Set();
+		for (const match of source.matchAll(/\.inject\(\s*\[([^\]]*)\]/g)) {
+			for (const item of match[1].matchAll(/"([^"]+)"/g)) names.add(item[1]);
+		}
+		if (names.size > 0) byFile.set(file, [...names].sort());
+	}
+	return byFile;
+}
+
+/**
+ * 找出 `变量 = <ctx>.<服务>` 形式的服务别名,例如 `settingsService = sctx.settings`。
+ *
+ * 插件习惯把服务存进模块级变量再复用(`settingsService.get(...)`),这类调用是
+ * **两段式**,按 `<接收者>.<服务>.<方法>(` 抽取的检查根本看不到它们。别名映射
+ * 把 `别名.方法(` 折回服务名下,才不至于漏掉"服务还在、方法已被删"。
+ * @returns 别名 → 服务名。
+ */
+function serviceAliases(files, services) {
+	const aliases = new Map();
+	for (const file of files) {
+		const source = readSource(file);
+		for (const match of source.matchAll(/([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$]*\.([A-Za-z_$][\w$]*)\s*[;,\n)]/g)) {
+			const [, alias, service] = match;
+			if (!services.has(service)) continue;
+			aliases.set(alias, service);
+		}
+	}
+	return aliases;
+}
+
+/**
+ * 抽出插件对运行时服务的调用:三段式 `<接收者>.<服务>.<方法>(`,以及别名形式
+ * `<别名>.<方法>(`(别名来自 `serviceAliases`)。两者都只保留服务名确实存在于
+ * 目标运行时的那些。
+ * @returns 服务名 → (方法名 → 出处文件集合)。
+ */
+function serviceCalls(files, services, aliases) {
 	const calls = new Map();
+	const record = (service, method, file) => {
+		const methods = calls.get(service) ?? new Map();
+		const origins = methods.get(method) ?? new Set();
+		origins.add(file);
+		methods.set(method, origins);
+		calls.set(service, methods);
+	};
 	const callRe = /\b[A-Za-z_$][\w$]*\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(/g;
+	const aliasRe = /\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(/g;
 	for (const file of files) {
 		const source = readSource(file);
 		for (const match of source.matchAll(callRe)) {
 			const [, service, method] = match;
 			if (!services.has(service)) continue;
-			const methods = calls.get(service) ?? new Map();
-			const origins = methods.get(method) ?? new Set();
-			origins.add(file);
-			methods.set(method, origins);
-			calls.set(service, methods);
+			record(service, method, file);
+		}
+		for (const match of source.matchAll(aliasRe)) {
+			const [, alias, method] = match;
+			const service = aliases.get(alias);
+			if (service === undefined) continue;
+			record(service, method, file);
 		}
 	}
 	return calls;
@@ -380,18 +446,37 @@ function checkClientInjectGraph(modulesRoot, names) {
 }
 
 /**
+ * 判断运行时源码里是否**定义了**方法 `method`,而不只是调用了同名方法。
+ *
+ * 判据是「方法名前面不是点」:类方法是 `\tregister(route) {`,调用是
+ * `revisions.get(id)`。朴素的 `includes("get(")` 会把 Map 的 `get` 当成服务
+ * 方法,于是 `settings.get()` 被判为"存在"——0.1.7 移除 `get` 与
+ * `installSection` 时,前者就是这么漏过去的。
+ * @returns 源码里是否出现该方法定义。
+ */
+function definesMethod(source, method) {
+	const escaped = method.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(`(^|[^.\\w$])${escaped}\\s*\\(`).test(source);
+}
+
+/**
  * 校验半边代码:声明的服务存在、调用的方法存在。
+ * @param injectDecls - 服务依赖来源;每项带 `label`,区分顶层声明与运行时注入。
  * @returns 失败条数。
  */
 function checkHalf(label, files, services, injectDecls) {
 	console.log(`\n${label}\n`);
 	let failures = 0;
 	const declared = new Set();
-	for (const { file, names } of injectDecls) {
+	for (const { file, label: source, names } of injectDecls) {
 		for (const name of names) declared.add(name);
-		console.log(`inject(${files.join(", ")} → ${file}): ${names.join(", ") || "(空)"}`);
+		console.log(`${source}(${files.join(", ")} → ${file}): ${names.join(", ") || "(空)"}`);
 	}
-	const calls = serviceCalls(files, services);
+	const aliases = serviceAliases(files, services);
+	if (aliases.size > 0) {
+		console.log(`服务别名: ${[...aliases].map(([alias, service]) => `${alias} → ${service}`).join(", ")}`);
+	}
+	const calls = serviceCalls(files, services, aliases);
 
 	for (const name of [...new Set([...declared, ...calls.keys()])].sort()) {
 		const entry = services.get(name);
@@ -402,7 +487,7 @@ function checkHalf(label, files, services, injectDecls) {
 		}
 		const byMethod = calls.get(name) ?? new Map();
 		const missing = [...byMethod.keys()]
-			.filter((method) => !entry.sources.some((source) => source.includes(`${method}(`)))
+			.filter((method) => !entry.sources.some((source) => definesMethod(source, method)))
 			.sort();
 		if (missing.length === 0) {
 			const used = [...byMethod.keys()].sort();
@@ -450,12 +535,13 @@ for (const [specifier, bySymbol] of [...required].sort(([a], [b]) => a.localeCom
 	for (const symbol of missing) console.log(`    缺失导出 ${symbol} — 引用位置: ${[...bySymbol.get(symbol)].join(", ")}`);
 }
 
-failures += checkHalf("服务端服务(lib/index.js 等)", serverFiles, collectServices(modulesRoot, "index.js"), [
-	{ file: "index.js", names: declaredServices("index.js") }
-]);
-failures += checkHalf("客户端服务(lib/client.js)", clientFiles, collectServices(modulesRoot, "client.js"), [
-	{ file: "client.js", names: declaredServices("client.js") }
-]);
+const serverDecls = [{ file: "index.js", label: "顶层 inject", names: declaredServices("index.js") }];
+for (const [file, names] of runtimeInjectedServices(serverFiles)) serverDecls.push({ file, label: "ctx.inject", names });
+failures += checkHalf("服务端服务(lib/index.js 等)", serverFiles, collectServices(modulesRoot, "index.js"), serverDecls);
+
+const clientDecls = [{ file: "client.js", label: "顶层 inject", names: declaredServices("client.js") }];
+for (const [file, names] of runtimeInjectedServices(clientFiles)) clientDecls.push({ file, label: "ctx.inject", names });
+failures += checkHalf("客户端服务(lib/client.js)", clientFiles, collectServices(modulesRoot, "client.js"), clientDecls);
 
 console.log("\n订阅的事件\n");
 const events = collectEvents(modulesRoot);

@@ -1,5 +1,65 @@
 # 更新记录
 
+## 0.5.0
+
+**破坏性更新:只支持 DSH 0.1.7 及以后。** DSH 0.1.7 重构了设置架构,插件此前依赖的 `settings.installSection` 与 `settings.get` 被整体移除,导致插件在 **0.1.7-rc.2**(当前 `latest`)与 **0.2.0-rc.1**(`next`)上已经**半失效**。本版按新架构重写设置接入。
+
+### 修复:插件在 0.1.7+ 上一直处于半失效状态
+
+`0.1.7-alpha.2` 起 `dsh-settings` 的 `SettingsForms` 只剩 `configure` / `describe` / `update` / `replace` / `mutate` / `schema` / `prepareDocument` 等方法,`installSection` 与 `get` 不复存在。失效链条:
+
+- `ctx.inject(["settings"], …)` 回调里的 `sctx.settings.installSection(...)` 抛 `TypeError`,回调中断;
+- 而 `scheduleBoot()`(**启动链的唯一入口**)只在该回调的 `onChange` 里被调用,于是启动链永不执行——接管外部服务、后台端口监控、Qwen3 思考强度补全一起静默停摆;
+- 设置页不再出现本插件的任何字段(旧架构靠 `installSection` 注册命名空间);
+- `settingsService.get("llm-pi-ai")` 抛错被 `catch` 吞掉,思考强度补全重试 30 次后放弃。
+
+**运行时证据**:`~/.dsh/mlx/logs/plugin-boot.log` 里,9/27 之前每次启动都有 `boot: 启动链执行` / `adopt 完成` / `启动后台端口监控` 三条,之后只剩 `apply: dispose 注册完成` 一条。
+
+### 改造:接入 0.1.7 的设置架构
+
+- **Config 全部字段标 `.volatile()`**。新架构不再由插件注册命名空间,而是扫描每个插件条目的 `Config`、把 volatile 字段当作设置页表单(`dsh-settings` 的 `volatileForm`)。不标的话设置页什么都不显示,`update()` 也会以 "has no volatile fields" 拒绝写入。
+- **新增 volatile 解包**。标了 volatile 的字段在 loader 传入的 config 里不再是值,而是 `{ get(), [Symbol.for("cosmokit.volatile.write")](v) }` 引用;直接交给 `resolveConfig` 会把 `port` 当成对象、`models` 当成非数组。新增 `plainConfigValue()` 递归解包。
+  - 用 `Symbol.for("cosmokit.volatile.write")` 自行识别,不新增 `cosmokit` 依赖——cosmokit 注册的正是同一个全局 symbol,跨 ESM/CJS 副本也认得出。
+  - 配置缓存改为按**序列化结果**判定:loader 更新 volatile 值时是原地写回,config 对象标识始终不变,按标识缓存会一直返回旧配置。
+- **写入改用 loader 条目 id**。`settings.update()` 的第一个参数现在是 **profile entry id**,不再是插件自拟的命名空间。改为运行时读取 `ctx.fiber.entry?.options.id`——本插件 `cordis.patch.yml` 里声明的是 `dsh-mlx-local`,与包内旧常量 `mlx-local` 并不一致,硬编码必然写错条目。
+- **读取改用 `describe()`**。`settings.get("llm-pi-ai")` 换成 `settings.describe().find((form) => form.ns === "llm-pi-ai")?.value`。
+- **移除 `installSection` 调用**。启动链改为 apply 末尾直接调度一次(config 由 loader 同步传入,不再需要等设置层异步合并),此后的配置变更由 `loader/volatile-update` 事件驱动。
+- `peerDependencies` 提升到 `^0.1.7-rc.1 || ^0.2.0-rc.1`(两条版本线各自覆盖:预发布 semver 规则下,单一范围无法同时匹配 `0.1.7-rc.x` 与 `0.2.0-rc.1`);`@deepseek-ai/schemastery` 提到 `^3.18.3`——`volatile()` 正是 3.18.3 引入的,在 3.18.2 上会直接抛 `volatile is not a function`。
+
+### 升级必读:模型目录要手工迁移一次
+
+DSH 0.1.7 取消了 `settings.yaml`(设置改存 profile 条目),并自动把旧文件重命名为 `settings.yaml.imported`。但**本插件的配置导入会失败**:旧版 Config 没有 volatile 字段,DSH 在 `volatileForm()` 处抛错跳过,于是模型目录一直留在 `~/.dsh/settings.yaml.imported` 里,没有进入 profile。
+
+升级后请在 profile 的 `cordis.patch.yml` 里补上这一段,再重启 DSH:
+
+```yaml
+- id: dsh-mlx-local
+  name: dsh-mlx-local
+  config:
+    models:
+      - id: mlx-community-Qwen3-8B-4bit
+        repo: /Users/you/Models/mlx-community-Qwen3-8B-4bit/
+        name: mlx-community-Qwen3-8B-4bit
+```
+
+此后设置页的改动会写回同一个条目,不再需要手工编辑。
+
+### 工具:check:runtime 修掉三处漏检
+
+这次的不兼容**最初是被 `check:runtime` 报成全绿的**,原因是检查器自身有三处缺陷,现已修复:
+
+- **服务注册正则写死了参数名** `super(ctx, …)`,而 0.1.7 的 `dsh-settings` 写的是 `super(ownerContext, "settings")`——整个服务从清单里消失,"消失"的后果不是报错,而是依赖它的检查被静默跳过。
+- **`ctx.inject(["settings"], …)` 这类运行时注入未被收集**,只查了顶层 `export const inject`。
+- **别名调用漏检**:`settingsService = sctx.settings` 之后的两段式调用 `settingsService.get(...)` 抽取不到,新增别名追踪。
+
+方法存在性的判据也从 `includes("get(")` 收紧为「方法名前面不是点」——旧判据会被 `revisions.get(` 这类 Map 调用误判为"存在",这正是 `get` 被漏掉的原因。两个新版本上现在都能准确报出:
+
+```
+✗ settings (dsh-settings)
+    缺失方法 get — 引用位置: index.js
+    缺失方法 installSection — 引用位置: index.js
+```
+
 ## 0.4.2
 
 本版是针对 DSH **0.1.6-alpha.2**(npm `alpha` 标签)的兼容性复核:插件在该版本上**可以正常加载**,API 接触点无一处失效。复核同时暴露并修掉了一个一直存在、却因静默跳过而从未报错的客户端注入缺陷。

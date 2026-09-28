@@ -20,14 +20,32 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 |---|---|
 | Hardware | Apple Silicon (M-series) Mac |
 | OS | macOS 13 or later |
-| DSH | DeepSeek Harness 0.1.5-rc.1 or newer (verified up to 0.1.6-alpha.2) and a working `dsh` command |
+| DSH | DeepSeek Harness **0.1.7-rc.1 or newer** (verified up to 0.2.0-rc.1) and a working `dsh` command |
 | Python | 3.9–3.13, recommended 3.10–3.12; the plugin suggests `brew install python@3.12` when missing |
 | Network | Internet is needed the first time to download Hugging Face weights |
 | Disk | About 2–6 GB per 4-bit model |
 
 ## Version and updates
 
-Current version: **0.4.2**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+Current version: **0.5.0**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+
+> **0.5.0 is a breaking release: it requires DSH 0.1.7 or newer, and the model catalogue needs a one-time manual migration.**
+
+DSH 0.1.7 rewrote its settings architecture and removed the `settings.installSection` and `settings.get` APIs this plugin relied on. On **0.1.7-rc.2 and 0.2.0-rc.1 the old plugin was half-broken**: the "MLX 模型" Settings section disappeared and the boot chain (adopting an already-running service, the port monitor, the Qwen3 reasoning-effort backfill) stopped running — **without reporting a single error**. This release re-implements settings against the new architecture and requires DSH **0.1.7-rc.1 or newer**.
+
+**Do the config migration once when upgrading.** DSH dropped `settings.yaml` and renamed the old file to `~/.dsh/settings.yaml.imported`, but this plugin's Config had no volatile fields at the time, so DSH skipped it during import and the model catalogue never reached the profile. Add this to your **profile's `cordis.patch.yml`** (e.g. `~/.dsh/profiles/web/cordis.patch.yml`):
+
+```yaml
+- id: dsh-mlx-local
+  name: dsh-mlx-local
+  config:
+    models:
+      - id: your-model-id
+        repo: /absolute/path/or/HF-repo
+        name: Display name
+```
+
+Then restart DSH. From that point on, edits made in the Settings page are saved normally and this file no longer needs hand-editing.
 
 > **0.4.2 is a compatibility re-check against DSH 0.1.6-alpha.2 — no breaking changes.**
 
@@ -54,7 +72,7 @@ Installing, updating, and removing a standard plugin all modify the profile, so 
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
 ```
 
 Then restart DSH. Model directories and other settings live in `settings.yaml` and survive the upgrade.
@@ -66,14 +84,14 @@ Then restart DSH. Model directories and other settings live in `settings.yaml` a
 Install directly:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
 ```
 
 If DSH does not follow redirects, download it manually first:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
 ```
 
 Restart DSH after installing.
@@ -85,7 +103,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
 ```
 
 Then restart DSH.

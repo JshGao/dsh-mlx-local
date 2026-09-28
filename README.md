@@ -22,14 +22,32 @@
 |---|---|
 | 硬件 | Apple Silicon(M 系列)Mac |
 | 系统 | macOS 13 或更高 |
-| DSH | DeepSeek Harness 0.1.5-rc.1 或更高(已实测至 0.1.6-alpha.2)及可用的 `dsh` 命令 |
+| DSH | DeepSeek Harness **0.1.7-rc.1 或更高**(已实测至 0.2.0-rc.1)及可用的 `dsh` 命令 |
 | Python | 3.9–3.13,建议 3.10–3.12;未安装时插件会给出 `brew install python@3.12` 提示 |
 | 网络 | 首次使用 HF 模型时需要联网下载权重 |
 | 磁盘 | 每个 4-bit 模型约 2–6 GB |
 
 ## 版本与更新
 
-当前版本 **0.4.2**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+当前版本 **0.5.0**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+
+> **0.5.0 是破坏性更新:只支持 DSH 0.1.7 及以后,且模型目录需要手工迁移一次。**
+
+DSH 0.1.7 重写了设置架构,插件此前依赖的 `settings.installSection` 与 `settings.get` 被整体删除。旧版插件在 **0.1.7-rc.2 及 0.2.0-rc.1 上处于半失效状态**:设置页不显示「MLX 模型」栏目,启动链(接管外部服务、端口监控、Qwen3 思考强度补全)不再执行——而且**全程不报错**。本版按新架构重写设置接入,需要 DSH **0.1.7-rc.1 或更高**。
+
+**升级时请做一次配置迁移。** DSH 取消了 `settings.yaml`,旧文件已被自动改名为 `~/.dsh/settings.yaml.imported`;但本插件当时的 Config 没有 volatile 字段,DSH 导入时跳过了它,所以模型目录没进 profile。请在 **profile 的 `cordis.patch.yml`**(如 `~/.dsh/profiles/web/cordis.patch.yml`)里补上:
+
+```yaml
+- id: dsh-mlx-local
+  name: dsh-mlx-local
+  config:
+    models:
+      - id: your-model-id
+        repo: /绝对路径/或/HF仓库名
+        name: 显示名
+```
+
+然后重启 DSH。此后在设置页里的改动会正常保存,不用再手工编辑这个文件。
 
 > **0.4.2 是针对 DSH 0.1.6-alpha.2 的兼容性复核,无破坏性变更。**
 
@@ -56,7 +74,7 @@
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
 ```
 
 然后重启 DSH。模型目录等设置保存在 `settings.yaml` 中,升级不会丢失。
@@ -68,14 +86,14 @@ dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/do
 直接安装:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
 ```
 
 如果 DSH 不跟随下载跳转,先手动下载:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.4.2/dsh-mlx-local-0.4.2.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
 ```
 
 安装后重启 DSH。
@@ -87,7 +105,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.4.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
 ```
 
 然后重启 DSH。
