@@ -1,5 +1,28 @@
 # 更新记录
 
+## 0.5.1
+
+修掉 0.5.0 漏改的一处 `settings.get()`——它让**本地模型的推理路径完全失效**,而检查器当时没抓到。
+
+- **`lib/stream.js` 的 `localProviderRoutes` 仍在调用已被删除的 `settings.get()`**(缺陷修复)。这个函数负责算出「哪些 llm-pi-ai 自定义提供方指向本机」,`llm/stream` 拦截器据此决定是否接管请求。`get()` 在 0.1.7 上不存在,抛错后被 `try/catch` 吞掉,于是**路由集永远为空 → 拦截器永远不接管 → 请求落到普通 provider 路径**,用户看到的是:
+
+  ```
+  本轮运行失败 No API key for provider: local-mlx
+  ```
+
+  也就是说模型能启动、设置页也正常,但**一发请求就失败**。改为 `settings.describe().find((form) => form.ns === "llm-pi-ai")?.value`,与 0.5.0 里 `index.js` 的改法一致。
+- **热路径加缓存**(性能)。`describe()` 会遍历全部插件条目并生成表单,而 `llm/stream` 是每个请求都要过的路径。本地路由集合现在缓存 5 秒,本插件自身的配置变化(`loader/volatile-update`)会立刻让它失效;5 秒的上限保证「刚在设置页加好的 provider」在下一次请求即可生效。
+- **`check:runtime` 的别名追踪扩展到传递性**(工具增强)。0.5.0 之所以漏掉这一处,是因为 `service` 这个变量并非直接赋值:
+
+  ```js
+  settingsService = sctx.settings;                        // 0.5.0 只认这一种
+  const service = typeof settingsService === "function"   // ← 经参数/表达式传递
+      ? settingsService() : settingsService;
+  section = service.get(llmPiAiNs);                       // ← 于是这行没人检查
+  ```
+
+  现在别名会迭代到不动点,`service → settings` 能被认出来。回归验证:把 `describe()` 改回 `get()`,检查器立刻报出 `缺失方法 get — 引用位置: stream.js`,退出码 1。传递那一轮刻意保守——只有右值里**调用了**已知别名才算,`x = settingsService.name` 这类属性读取不算,避免把普通变量误判成服务。
+
 ## 0.5.0
 
 **破坏性更新:只支持 DSH 0.1.7 及以后。** DSH 0.1.7 重构了设置架构,插件此前依赖的 `settings.installSection` 与 `settings.get` 被整体移除,导致插件在 **0.1.7-rc.2**(当前 `latest`)与 **0.2.0-rc.1**(`next`)上已经**半失效**。本版按新架构重写设置接入。

@@ -29,7 +29,7 @@
 
 ## 版本与更新
 
-当前版本 **0.5.0**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+当前版本 **0.5.1**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
 
 > **0.5.0 是破坏性更新:只支持 DSH 0.1.7 及以后,且模型目录需要手工迁移一次。**
 
@@ -74,7 +74,7 @@ DSH 0.1.7 重写了设置架构,插件此前依赖的 `settings.installSection` 
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
 ```
 
 然后重启 DSH。模型目录等设置保存在 `settings.yaml` 中,升级不会丢失。
@@ -86,14 +86,14 @@ dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/do
 直接安装:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
 ```
 
 如果 DSH 不跟随下载跳转,先手动下载:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
 ```
 
 安装后重启 DSH。
@@ -105,7 +105,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
 ```
 
 然后重启 DSH。

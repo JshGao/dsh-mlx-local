@@ -253,22 +253,50 @@ function runtimeInjectedServices(files) {
 }
 
 /**
- * 找出 `变量 = <ctx>.<服务>` 形式的服务别名,例如 `settingsService = sctx.settings`。
+ * 找出服务变量在插件里的各种别名。
  *
- * 插件习惯把服务存进模块级变量再复用(`settingsService.get(...)`),这类调用是
- * **两段式**,按 `<接收者>.<服务>.<方法>(` 抽取的检查根本看不到它们。别名映射
- * 把 `别名.方法(` 折回服务名下,才不至于漏掉"服务还在、方法已被删"。
+ * 插件很少一路写 `<ctx>.<服务>.<方法>(`,更常见的是先存下来再层层传递:
+ *
+ *   settingsService = sctx.settings;                    // 直接赋值
+ *   const service = typeof settingsService === "function"
+ *       ? settingsService() : settingsService;          // 经参数/表达式传递
+ *   section = service.get(llmPiAiNs);                   // 两段式调用
+ *
+ * 只认第一种会漏掉后两种,而漏掉的后果是"服务方法已被删除"检查不到——
+ * `lib/stream.js` 的 `service.get(...)` 就是这么在 0.1.7 上活下来的,表现出来
+ * 是拦截器静默失效、请求落到普通 provider 路径(报 "No API key for provider")。
+ *
+ * 传递那一轮刻意保守:只有右值里**调用了**已知别名(或右值本身就是别名)才认定
+ * 新别名;`x = settingsService.name` 这种属性读取不算,免得把普通变量也当成
+ * 服务而制造误报。
  * @returns 别名 → 服务名。
  */
 function serviceAliases(files, services) {
 	const aliases = new Map();
-	for (const file of files) {
-		const source = readSource(file);
+	const sources = files.map((file) => readSource(file));
+	for (const source of sources) {
 		for (const match of source.matchAll(/([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$]*\.([A-Za-z_$][\w$]*)\s*[;,\n)]/g)) {
 			const [, alias, service] = match;
 			if (!services.has(service)) continue;
 			aliases.set(alias, service);
 		}
+	}
+	// 迭代到不动点:别名链可能有若干跳(`a = sctx.settings` → `b = f(a)` → `c = b`)。
+	for (let round = 0; round < 8; round += 1) {
+		let grew = false;
+		for (const source of sources) {
+			for (const match of source.matchAll(/([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+)/g)) {
+				const [, alias, rhs] = match;
+				if (aliases.has(alias)) continue;
+				for (const [known, service] of aliases) {
+					if (!new RegExp(`\\b${known}\\s*\\(`).test(rhs) && rhs.trim() !== known) continue;
+					aliases.set(alias, service);
+					grew = true;
+					break;
+				}
+			}
+		}
+		if (!grew) break;
 	}
 	return aliases;
 }

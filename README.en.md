@@ -27,7 +27,7 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 
 ## Version and updates
 
-Current version: **0.5.0**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+Current version: **0.5.1**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
 
 > **0.5.0 is a breaking release: it requires DSH 0.1.7 or newer, and the model catalogue needs a one-time manual migration.**
 
@@ -72,7 +72,7 @@ Installing, updating, and removing a standard plugin all modify the profile, so 
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
 ```
 
 Then restart DSH. Model directories and other settings live in `settings.yaml` and survive the upgrade.
@@ -84,14 +84,14 @@ Then restart DSH. Model directories and other settings live in `settings.yaml` a
 Install directly:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
 ```
 
 If DSH does not follow redirects, download it manually first:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.0/dsh-mlx-local-0.5.0.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
 ```
 
 Restart DSH after installing.
@@ -103,7 +103,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.5.0.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
 ```
 
 Then restart DSH.
