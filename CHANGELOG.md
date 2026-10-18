@@ -1,5 +1,50 @@
 # 更新记录
 
+## 0.5.2
+
+**DSH 0.2.1 的兼容性复核,无破坏性变更。** 已在 **0.2.1-rc.2**(npm `next`)上完成实机验证:插件加载、启动链、设置页栏目、`/mlx/api`、Qwen3 思考强度补全与设置写入全部正常。
+
+### 修复:代码兼容,但 `peerDependencies` 让 0.2.1 装不上
+
+`peerDependencies` 原来写的是 `^0.1.7-rc.1 || ^0.2.0-rc.1`。按 semver 的预发布规则,范围里的比较器只与**同一 `major.minor.patch`** 的预发布版本比较,所以该范围**匹配不了 `0.2.1-rc.2`**:
+
+| 运行时 | 满足 `^0.2.0-rc.1`? |
+|---|---|
+| `0.2.0-rc.2` | ✅ |
+| `0.2.1-rc.2` | ❌ |
+
+结果是 `npm install` 报 `ERESOLVE`(或装完提示 peer 未满足),而插件本身在 0.2.1 上完全可用。已补上 `^0.2.1-rc.1`,三条版本线各自写出范围。
+
+**为什么之前没发现**:`check:runtime` 只比对具名导入、服务名/方法、事件、槽名与客户端模块图——代码层全绿,版本声明这一层没人看。这次补上了。
+
+### 检查器:新增第 7 类检查(peerDependencies 范围)
+
+- `check:runtime` 现在会把目标运行时里**实际安装的版本**与 `package.json` 的 peer 范围逐条比对,不满足就退出码 1。范围判断自带极简 semver 实现 `scripts/semver-lite.mjs`(支持 `^`/`~`/比较器/`||`,含 npm 的预发布规则),理由与检查器本身一致:**只依赖目标运行时,不额外 import semver**(它未必在运行时的顶层 node_modules 里)。
+- 新增 `test/semver.test.mjs` 固定本轮的实际坑(`0.2.1-rc.2` 不满足 `^0.2.0-rc.1`、满足 `^0.2.1-rc.1`),并覆盖 caret/tilde/比较器的边界。
+
+### 改进:设置页在 `dsh web --host <局域网地址>` 下可用
+
+DSH 0.2.1 起 `dsh web` 支持把 GUI 绑到具体接口地址(而不只是回环)。插件的 `/mlx/api` 原先要求 `Host` 必须是回环名,会在这种部署下整片 403。现在的 fence:
+
+- 回环地址照旧允许;
+- 非回环时,`Host` 必须**恰好等于连接落入的本机接口地址**(`req.socket.localAddress`);
+- `Origin` 仍须与 `Host` 同源,`sec-fetch-site: cross-site` 仍拒绝。
+
+DNS rebinding 防护不变:攻击者域名解析到本机 IP 时,浏览器发来的 `Host` 仍是该域名,不等于接口地址。
+
+### 改进:本机提供方判定改用 URL 解析(新增 `lib/local.js`)
+
+「思考强度补全」(index.js)与「llm/stream 拦截器」(stream.js)本来各写一份 `baseURL.includes("127.0.0.1")`。两份判据既容易漂移,又会把 `https://example.com/?next=127.0.0.1` 这类地址误判成本机服务(后果是被拦截器接管、由本机代发请求)。现在:
+
+- 两处共用 `isLocalOpenAiProvider()`,按 `URL` 解析主机名,回环段(127/8、`localhost`、`::1`)或与服务实际监听 origin 相同才算本机;
+- 服务绑到局域网地址时(`host` 配置为非回环)也能识别,不再是「设置页补全了、拦截器不接管」的半失效状态。
+
+### 其他
+
+- `~/.dsh/mlx/logs/server.log` 改为跟随 `$DSH_HOME`,与启动探针 `plugin-boot.log` 一致:隔离 home / 测试 profile 不再把服务日志写进真实 home。venv 仍默认共享 `~/.dsh/mlx/venv`。
+- `/mlx/api` 的 JSON 请求体加 1MB 上限,超限返回 413(此前无界缓冲)。
+- 删除未使用的 `DEFAULT_LOG_DIR` 常量。
+
 ## 0.5.1
 
 修掉 0.5.0 漏改的一处 `settings.get()`——它让**本地模型的推理路径完全失效**,而检查器当时没抓到。

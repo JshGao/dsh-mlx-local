@@ -16,7 +16,7 @@
 npm install
 ```
 
-依赖只有 peerDependencies,作用是让 `lib/*.js` 里的 `@deepseek-ai/*` 导入在本地可解析,并让 `npm test` 能跑。它们与运行时是**同一条版本线**(`^0.1.5-rc.1`),但仍可能与真实 DSH 的具体小版本不同,所以别把 `npm test` 当作运行时兼容性证明——那是 `check:runtime` 的职责,见下文。
+依赖只有 peerDependencies,作用是让 `lib/*.js` 里的 `@deepseek-ai/*` 导入在本地可解析,并让 `npm test` 能跑。它们与运行时是**同一条版本线**(当前是 `^0.1.7-rc.1 || ^0.2.0-rc.1 || ^0.2.1-rc.1`),但仍可能与真实 DSH 的具体小版本不同,所以别把 `npm test` 当作运行时兼容性证明——那是 `check:runtime` 的职责,见下文。
 
 若 shell 受限导致 npm 无法写入 `~/.npm`(`EPERM: operation not permitted`),把缓存指到仓库内:
 
@@ -36,7 +36,7 @@ npm run check:runtime  # 与真实 DSH 运行时比对服务端导入与客户�
 
 ### check:runtime
 
-`scripts/check-runtime.mjs` 做六类检查,都以**真实 DSH 运行时**为准:
+`scripts/check-runtime.mjs` 做七类检查,都以**真实 DSH 运行时**为准:
 
 1. **服务端具名导入**:扫描 `lib/*.js` 里所有 `@deepseek-ai/*` 的具名导入,逐个到目标运行时的同名包里确认导出存在。这类缺失是 ESM **链接期**错误,插件会直接加载失败。
 2. **服务名**:服务端 `export const inject` 与客户端 `const inject` 声明的每个服务,运行时里是否真有插件提供。
@@ -44,8 +44,9 @@ npm run check:runtime  # 与真实 DSH 运行时比对服务端导入与客户�
 4. **订阅的事件**:`ctx.on("事件名")` 订阅的事件,运行时里是否确有包发出。
 5. **界面槽**:`ctx.slots.inject("槽名", …)` 的槽名,运行时里是否还有别的包在用。
 6. **客户端模块图**:`package.json` 的 `dsh.client.inject` 里的每个包名,是否真的在客户端模块图内(包存在**且**自带 `dsh.client` 声明)。
+7. **peerDependencies 版本范围**:运行时里实际安装的版本是否落在声明范围内,用自带的极简 semver(`scripts/semver-lite.mjs`)判断。前六项全绿也可能**装不上**:预发布 semver 规则下 `^0.2.0-rc.1` 匹配不了 `0.2.1-rc.2`。
 
-第 2、3 类靠两个来源对齐:从运行时各 bundle 的 `super(ctx, "<名>")` 收集服务清单(服务端扫 `lib/index.js`,客户端扫 `lib/client.js`),再从本仓库代码里抽出服务声明与调用。第 4 类收集 `emit` / `parallel` / `serial` / `bail` / `waterfall` 五种派发的事件名。第 5、6 类是 0.4.2 补的,专治两种**静默失效**,机制见下文「第四轮」。
+第 2、3 类靠两个来源对齐:从运行时各 bundle 的 `super(ctx, "<名>")` 收集服务清单(服务端扫 `lib/index.js`,客户端扫 `lib/client.js`),再从本仓库代码里抽出服务声明与调用。第 4 类收集 `emit` / `parallel` / `serial` / `bail` / `waterfall` 五种派发的事件名。第 5、6 类是 0.4.2 补的,专治两种**静默失效**;第 7 类是 0.5.2 补的,机制见下文「第六轮」。
 
 扫描前会先剥离注释(状态机实现,不是正则——代码里有 `"http://x"`),否则注释里提到的 API 名字会被当成真实调用。
 
@@ -59,13 +60,14 @@ DSH_RUNTIME_ROOT=/path/to/node_modules npm run check:runtime
 
 **改了 `lib/` 里的导入、服务调用、`inject` 声明或事件订阅之后一定要跑它。** 单测只加载本仓库的 `node_modules`,发现不了版本漂移。
 
-五点局限:
+六点局限:
 
 - 方法判据是「方法名在提供该服务的包里出现过」,偏宽松:宁愿漏报也不误报。它抓不住「同一文件里两个服务、方法名恰好撞上」;真要精确追踪得跑起浏览器。
 - 只认识通过 `super(ctx, "<名>")` 注册的服务。若某个服务改用别的方式注册,会被当成"无人提供"而**误报**——真遇到时先确认注册方式再判断。
 - 事件检查只看**本插件订阅**的事件,不校验回调签名。签名错了(例如 waterfall 少了 `next` 参数)只能靠实测。
 - 第 5、6 类只判**存在性**,不判**顺序**:名字在图里、槽有别人在用,不等于插件注册的那一刻它们一定已就绪。真正的时序保证来自 cordis 的服务注入(`inject = ["slots", "uiWorkspace"]`),检查器只负责拦住"名字写错"这一类。
 - 第 5 类的判据是「运行时里有没有别的包用这个槽名」。将来若新增**自家私有**的槽,它会误报——届时得把该槽的领用方也纳入判据。
+- 第 7 类只支持 `package.json` 里会出现的简单范围(`^`/`~`/比较器/`||`),不实现完整的 semver 语法;目标运行时缺包时只提示、不计失败(那属于第 1 类或部署问题)。
 
 ### 前向兼容:对第二个运行时跑一遍
 
@@ -76,11 +78,11 @@ npm install --prefix .dshtest-rc2 --cache ./.npm-cache @deepseek-ai/dsh@<版本>
 node scripts/check-runtime.mjs .dshtest-rc2/node_modules
 ```
 
-`280MB` 左右,用完删掉即可(`.dshtest*/` 已在 `.gitignore` 中)。0.3.2 靠这个确认了对 `0.1.5-rc.2` 同样兼容,0.4.2 靠它确认了对 `0.1.6-alpha.2` 同样兼容。
+`280MB` 左右,用完删掉即可(`.dshtest*/` 已在 `.gitignore` 中)。0.3.2 靠这个确认了对 `0.1.5-rc.2` 同样兼容,0.4.2 靠它确认了对 `0.1.6-alpha.2` 同样兼容,0.5.2 靠它在 `0.2.1-rc.2` 上做了完整实机验证(安装 → 启动 → 设置页 → `/mlx/api` → 浏览器无错误)。
 
 装 **alpha** 版本有两个坑要先知道:
 
-- npm 会报 `ERESOLVE`。插件的 peer 范围 `^0.1.5-rc.1` 按 semver 预发布规则不匹配 `0.1.6-alpha.2`——但**官方包同样如此**(它们写 `^0.1.5-rc.2`),这是规则固有限制,不是插件写错。加 `--legacy-peer-deps` 即可。
+- npm 会报 `ERESOLVE`。预发布范围只匹配同一 `major.minor.patch` 的预发布版本,所以**升级到新版本线时要同步扩 peer 范围**(例如 0.5.2 补 `^0.2.1-rc.1` 就是为了 0.2.1-rc.2)。加 `--legacy-peer-deps` 可绕过安装期的检查,但别用它掩盖真实的范围漂移——`check:runtime` 的第 7 类会直接判失败。
 - 装出来是**混合版本树**:`dsh@0.1.6-alpha.2` 的依赖写 `^0.1.5-rc.2`,于是多数子包仍解析到 `0.1.5-rc.2`。想验"全量新版本",得显式点名升级:
 
 ```bash
@@ -101,7 +103,7 @@ node -e 'import("dsh-mlx-local").then(m => console.log(m.name, m.inject))'
 
 0.4.2 的复核就是这么做的,三项都过:真实 ESM 链接(确认解析到目标版本的 `dsh-llm`)、`apply(ctx)` 在真实 cordis Context 上挂载冒烟、按 `__ModuleLoader__` 约定注入假 `window` 后调用客户端 factory。
 
-判读结论时记住:**peer 范围不匹配 alpha 是生态常态,不影响加载**。DSH 只用 peer 的**包名**建模块解析回退图(`dsh-app-boot` 的 `profileDependencyNames` 取 `dependencies` + `peerDependencies` 的键),**不校验版本范围**;真正决定成败的是第 1 类检查(具名导入)。
+判读结论时记住两点:**DSH 自己只按 peer 的包名建模块解析回退图**(`dsh-app-boot` 的 `profileDependencyNames` 取 `dependencies` + `peerDependencies` 的键),**运行时不校验版本范围**——所以范围写错不会让插件跑不起来,但会让 `npm install` / pnpm 安装失败或告警,并挡住后续升级。**发布前以第 7 类检查为准**:声明范围必须覆盖你打算支持的每条版本线(0.5.2 就是因此补了 `^0.2.1-rc.1`)。
 
 ## 开发回路
 
@@ -165,7 +167,7 @@ DSH_HOME="$(pwd)/.dshtest" dsh --profile web --port 0 --no-open
 curl -s -X POST "http://127.0.0.1:<端口>/mlx/api/status" -H 'Content-Type: application/json' -d '{}'
 ```
 
-用完后 kill 进程并删除 `.dshtest/`(`.dshtest/` 已在 `.gitignore` 中)。注意插件的探针日志固定写 `~/.dsh/mlx/logs/`,不受 `DSH_HOME` 影响;写不进去也无妨,`bootLog` 有 try/catch 兜底。
+用完后 kill 进程并删除 `.dshtest/`(`.dshtest/` 已在 `.gitignore` 中)。插件日志跟随 `$DSH_HOME`:探针写 `$DSH_HOME/mlx/logs/plugin-boot.log`,`mlx_lm.server` 输出写 `$DSH_HOME/mlx/logs/server.log`,所以隔离 home 不会污染 `~/.dsh`;写不进去也无妨,`bootLog` 有 try/catch 兜底。
 
 ### 验证生命周期行为(卸载/退出清理)
 
@@ -184,10 +186,10 @@ appendFileSync("/绝对路径/probe.log", `ran at ${new Date().toISOString()}\n`
 pid=$(lsof -nP -iTCP:<端口> -sTCP:LISTEN -t | head -1); kill -TERM "$pid"
 ```
 
-调试用日志:
+调试用日志(均跟随 `$DSH_HOME`,默认 `~/.dsh`):
 
 - `~/.dsh/mlx/logs/plugin-boot.log` — 插件启动链
-- `~/.dsh/mlx/logs/` — `mlx_lm.server` 输出
+- `~/.dsh/mlx/logs/server.log` — `mlx_lm.server` 输出
 
 ## 与 DSH 运行时的兼容性
 
@@ -202,7 +204,7 @@ pid=$(lsof -nP -iTCP:<端口> -sTCP:LISTEN -t | head -1); kill -TERM "$pid"
 
 于是 `npm install` 会安静地装到 `0.1.0-rc.8`,`npm test` 全绿;而真实 DSH 在模块链接阶段直接抛 `SyntaxError`。这就是 `check:runtime` 存在的理由——它在本机复现了这个差异。
 
-插件现在的范围是 `^0.1.5-rc.1`,能正确匹配 `0.1.5-rc.x`,也能在未来 `0.1.5` 转正后继续匹配到 `<0.2.0`。**改动版本范围时请用 `check:runtime` 复核,不要只看 `npm test`。**
+插件现在的范围是 `^0.1.7-rc.1 || ^0.2.0-rc.1 || ^0.2.1-rc.1`,覆盖 0.1.7、0.2.0、0.2.1 三条预发布线。**改动版本范围时请用 `check:runtime` 复核,不要只看 `npm test`**——第六轮(0.5.2)就是因为只跑了前六类检查,漏掉了 0.2.1 的范围。
 
 ### 已经踩过的缺口
 
@@ -331,6 +333,29 @@ DSH `0.1.7-alpha.2` 起 `dsh-settings` 换掉了整套设置模型,插件的三�
 
 第五轮之后版本要求是 `^0.1.7-rc.1 || ^0.2.0-rc.1`,**只支持 0.1.7 及以后**:旧线依赖的 `installSection` 与 `get` 已被上游删除,与新版互斥,一套代码无法同时兼容。两条版本线要各自写出范围——预发布 semver 规则下,单一范围匹配不了 `0.1.7-rc.x` 与 `0.2.0-rc.1` 两者。
 
+**第六轮(0.5.2):代码全兼容,但版本范围让 0.2.1 装不上**
+
+这一轮**没有任何代码不兼容**。DSH 0.2.1-rc.2 与 0.2.0-rc.2 的差异集中在:
+
+| 包 | 变化 | 对插件的影响 |
+|---|---|---|
+| `dsh-settings` | 无(lib 逐字节一致) | 无 |
+| `dsh-llm` | 新增 `imageRequestTarget`、`prepareCall` 的 `configure` 回调;移除 `INVARIANT` 内部错误码 | 无(插件不用这些) |
+| `dsh-llm` 的 `assembler`/`assistant-stream`/`content`/`message` 类型 | 无 | StreamChunk 协议未变,拦截器输出仍合法 |
+| `dsh-timeout` | 导出未变 | 无 |
+| `dsh-client-ui-renderer` / `dsh-client-ui-settings` / `dsh-client-ui-workspace` 的槽契约 | 无(仅新增 toast、release 变更提示等 API) | 设置页栏目注册不变 |
+| `dsh-host-webserver` | 支持任意具体接口地址与 TLS;拒绝通配地址 | `/mlx/api` 的 Host fence 需要放宽(见下) |
+| `cordis-plugin-loader` | `Entry.moduleNamespace` 新增字段 | 无 |
+| `dsh-home-paths` | 新增 `resolveDshHome` / `DSH_AGENTS_HOME` | 可对齐,但未引入新依赖 |
+
+实机验证(0.2.1-rc.2):`dsh plugin add` → 启动 → 设置页「MLX 模型」栏目 → `/mlx/api/status` → 保存参数写入 profile → Qwen3 思考强度补全写回 `llm-pi-ai` 配置,全部正常;浏览器控制台无错误。
+
+**唯一真正的坑在 `package.json`**:`^0.2.0-rc.1` 按预发布规则匹配不了 `0.2.1-rc.2`,npm 会报 `ERESOLVE`,而六类检查全绿。于是:
+
+1. 补 `^0.2.1-rc.1`;
+2. `check:runtime` 增加**第 7 类**:比对运行时实际安装版本与声明的 peer 范围,自带极简 semver(`scripts/semver-lite.mjs`),不引入外部依赖;
+3. 顺手修了两处真实弱点:本机判定从 `includes("127.0.0.1")` 改为 URL 解析(新增 `lib/local.js`,两处共用),Host fence 从「必须回环」放宽为「回环或连接实际落入的接口地址」——后者正是 0.2.1 新支持的 `dsh web --host <局域网地址>` 场景。
+
 ## 设置页栏目排序
 
 `settings.section` 槽按 `order` **升序**排列。官方栏目在 `0.1.5-rc.x` 上是四个,`0.1.6-alpha.2` 增至五个(下表为实测值):
@@ -373,10 +398,14 @@ grep -rn "settings\.section" ~/.dsh/profiles/web/node_modules/<插件>/client/ |
 
 | 路径 | 说明 |
 |---|---|
-| `lib/index.js` | 服务端入口:插件 `apply`、配置 schema、Python venv 管理(`MlxEnvironment`)、服务生命周期(`MlxServer`)、`/mlx/api` 回环接口 |
+| `lib/index.js` | 服务端入口:插件 `apply`、配置 schema、Python venv 管理(`MlxEnvironment`)、服务生命周期(`MlxServer`)、`/mlx/api` 同源接口 |
+| `lib/local.js` | 「本机 MLX 提供方」判定(URL 解析 + 回环/origin),由 `index.js` 与 `stream.js` 共用 |
 | `lib/stream.js` | 本地 openai-completions 请求的流式接入:SSE 解析、消息序列化、chunk 翻译为 DSH 的 llm chunk |
 | `lib/client.js` | 浏览器端「MLX 模型」设置栏目,手写 React、无构建步骤,遵循 `__ModuleLoader__` 约定 |
 | `test/config.test.mjs` | `resolveConfig` 的默认值、校验、Qwen3 思考推断、已下线字段的丢弃 |
 | `test/stream.test.mjs` | SSE 解析、消息序列化、chunk 翻译 |
+| `test/local.test.mjs` | 本机提供方判定(含误判 `includes` 的历史坑) |
+| `test/semver.test.mjs` | `check:runtime` 第 7 类用的极简 semver(预发布规则回归) |
 | `cordis.patch.yml` | bundle patch,安装时把插件挂进 profile |
-| `scripts/check-runtime.mjs` | 与真实 DSH 运行时比对服务端导入与客户端服务(本文件「check:runtime」) |
+| `scripts/check-runtime.mjs` | 与真实 DSH 运行时比对服务端导入、客户端服务、peer 版本范围(本文件「check:runtime」) |
+| `scripts/semver-lite.mjs` | 自包含的极简 semver,只给检查器用,避免依赖目标运行时里未必存在的 `semver` |

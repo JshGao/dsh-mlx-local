@@ -7,10 +7,19 @@
 Make sure `pnpm` and the `dsh` command are installed, then run again from the plugin directory:
 
 ```bash
-dsh plugin --profile web add ./dsh-mlx-local-0.2.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-<version>.tgz
 ```
 
 If it still fails, delete `~/.dsh/profiles/web/node_modules/dsh-mlx-local` and retry.
+
+### The install reports an unmet peer dependency / ERESOLVE
+
+The plugin declares its supported lines in `peerDependencies` (`^0.1.7-rc.1 || ^0.2.0-rc.1 || ^0.2.1-rc.1`), and semver's **prerelease rule** only compares a prerelease version against a range carrying a prerelease on the **same `major.minor.patch`**. So:
+
+- **DSH is newer than the plugin**: for example DSH moved to `0.2.2-rc.1` before the plugin widened its range. Upgrade the plugin first; as a temporary escape hatch `dsh plugin --profile web add ... --legacy-peer-deps` bypasses the install-time check (the plugin code usually still works).
+- **DSH is older than the plugin**: see "Requirements" in the README — 0.5.x needs DSH 0.1.7 or newer.
+
+To catch this early: `node scripts/check-runtime.mjs <DSH node_modules>` (check #7 compares the declared ranges).
 
 ### No "MLX 模型" section in Settings after installation
 

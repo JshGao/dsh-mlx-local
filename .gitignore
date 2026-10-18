@@ -10,3 +10,6 @@ node_modules/
 .pnpm-store/
 dev/
 .dshtest*/
+
+# dsh-mnemon 工作区记忆(本机数据,不进仓库)
+.mnemon/

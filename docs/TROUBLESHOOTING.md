@@ -9,10 +9,19 @@
 确认已安装 `pnpm` 和 `dsh` 命令,然后在插件目录重新执行:
 
 ```bash
-dsh plugin --profile web add ./dsh-mlx-local-0.2.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-<版本>.tgz
 ```
 
 如果仍失败,删除 `~/.dsh/profiles/web/node_modules/dsh-mlx-local` 后重试。
+
+### 安装时提示 peer 依赖不满足 / ERESOLVE
+
+插件的 `peerDependencies` 按 semver 的**预发布规则**逐条声明版本线(`^0.1.7-rc.1 || ^0.2.0-rc.1 || ^0.2.1-rc.1`):预发布版本只会与**同一 `major.minor.patch`** 的预发布范围比较。所以:
+
+- **DSH 比插件新**:例如 DSH 到了 `0.2.2-rc.1` 而插件还没更新范围。先升级插件;临时可用 `dsh plugin --profile web add ... --legacy-peer-deps` 绕过安装期检查(插件代码通常仍然可用)。
+- **DSH 比插件旧**:见 README 的「环境要求」,0.5.x 需要 DSH 0.1.7 及以后。
+
+想让检查器提前发现这类问题:`node scripts/check-runtime.mjs <DSH 的 node_modules>`(第 7 类检查专门比对 peer 范围)。
 
 ### 安装后设置页没有“MLX 模型”
 

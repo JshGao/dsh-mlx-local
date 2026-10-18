@@ -20,14 +20,24 @@ Run local large language models on Apple Silicon Macs through DSH. The plugin ma
 |---|---|
 | Hardware | Apple Silicon (M-series) Mac |
 | OS | macOS 13 or later |
-| DSH | DeepSeek Harness **0.1.7-rc.1 or newer** (verified up to 0.2.0-rc.1) and a working `dsh` command |
+| DSH | DeepSeek Harness **0.1.7-rc.1 or newer** (verified up to 0.2.1-rc.2) and a working `dsh` command |
 | Python | 3.9–3.13, recommended 3.10–3.12; the plugin suggests `brew install python@3.12` when missing |
 | Network | Internet is needed the first time to download Hugging Face weights |
 | Disk | About 2–6 GB per 4-bit model |
 
 ## Version and updates
 
-Current version: **0.5.1**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+Current version: **0.5.2**. See [CHANGELOG.md](CHANGELOG.md) for the full history; only the upgrade-relevant parts are repeated here.
+
+> **0.5.2 is a DSH 0.2.1 compatibility re-check — no breaking changes.**
+
+- Verified end to end on **DSH 0.2.1-rc.2** (npm `next`): named imports, services and methods, the `llm/stream` event, the **MLX 模型** Settings section, `/mlx/api`, the Qwen3 reasoning-effort backfill, and settings writes all work.
+- **Fixed a "code-compatible but uninstallable" problem**: `peerDependencies` said `^0.1.7-rc.1 || ^0.2.0-rc.1`, and by semver's prerelease rule that range **cannot match `0.2.1-rc.2`** — `npm install` reports `ERESOLVE` (or an unmet peer) even though the plugin runs fine on 0.2.1. `^0.2.1-rc.1` is now included.
+- `check:runtime` gained a **7th check**: whether the runtime satisfies the declared `peerDependencies` ranges, so "six checks green but the install fails" cannot recur. It ships with a tiny self-contained semver implementation (`scripts/semver-lite.mjs`) and unit tests.
+- **The Settings section now works when the GUI is bound to a LAN address** (`dsh web --host <ip>`, supported since DSH 0.2.1): the `/mlx/api` Host fence is relaxed from "loopback only" to "loopback **or** exactly the local interface address the connection arrived on"; the DNS-rebinding defense is unchanged.
+- **Local-service detection now parses URLs**: the new `lib/local.js` is shared by the reasoning backfill and the `llm/stream` interceptor, fixing `baseURL.includes("127.0.0.1")` misclassifying e.g. `https://example.com/?next=127.0.0.1`, and recognizing a service bound to a LAN address by origin.
+- `~/.dsh/mlx/logs/server.log` now follows `$DSH_HOME` (matching the boot probe `plugin-boot.log`), so isolated homes / test profiles no longer write into the real home; the venv still defaults to the shared `~/.dsh/mlx/venv` (override with `venvDir`).
+- `/mlx/api` request bodies are capped at 1 MB and larger ones get a 413.
 
 > **0.5.0 is a breaking release: it requires DSH 0.1.7 or newer, and the model catalogue needs a one-time manual migration.**
 
@@ -72,7 +82,7 @@ Installing, updating, and removing a standard plugin all modify the profile, so 
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.2/dsh-mlx-local-0.5.2.tgz
 ```
 
 Then restart DSH. Model directories and other settings live in `settings.yaml` and survive the upgrade.
@@ -84,14 +94,14 @@ Then restart DSH. Model directories and other settings live in `settings.yaml` a
 Install directly:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.2/dsh-mlx-local-0.5.2.tgz
 ```
 
 If DSH does not follow redirects, download it manually first:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.2/dsh-mlx-local-0.5.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.2.tgz
 ```
 
 Restart DSH after installing.
@@ -103,7 +113,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.2.tgz
 ```
 
 Then restart DSH.

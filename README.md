@@ -22,14 +22,24 @@
 |---|---|
 | 硬件 | Apple Silicon(M 系列)Mac |
 | 系统 | macOS 13 或更高 |
-| DSH | DeepSeek Harness **0.1.7-rc.1 或更高**(已实测至 0.2.0-rc.1)及可用的 `dsh` 命令 |
+| DSH | DeepSeek Harness **0.1.7-rc.1 或更高**(已实测至 0.2.1-rc.2)及可用的 `dsh` 命令 |
 | Python | 3.9–3.13,建议 3.10–3.12;未安装时插件会给出 `brew install python@3.12` 提示 |
 | 网络 | 首次使用 HF 模型时需要联网下载权重 |
 | 磁盘 | 每个 4-bit 模型约 2–6 GB |
 
 ## 版本与更新
 
-当前版本 **0.5.1**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+当前版本 **0.5.2**。逐版变更见 [CHANGELOG.md](CHANGELOG.md);这里只列升级前必须知道的。
+
+> **0.5.2 是 DSH 0.2.1 的兼容性复核,无破坏性变更。**
+
+- 已实测在 **DSH 0.2.1-rc.2**(npm `next` 标签)上完整可用:具名导入、服务与方法、`llm/stream` 事件、设置页「MLX 模型」栏目、`/mlx/api`、Qwen3 思考强度补全与设置写入**全部正常**。
+- **修掉一个「代码兼容但装不上」的问题**:`peerDependencies` 原来写的是 `^0.1.7-rc.1 || ^0.2.0-rc.1`,而按 semver 的预发布规则,该范围**匹配不了 `0.2.1-rc.2`**——`npm install` 会报 `ERESOLVE`(或装上后报 peer 未满足),尽管插件代码在 0.2.1 上完全正常。现已补上 `^0.2.1-rc.1`。
+- `check:runtime` 增加**第 7 类检查**:peerDependencies 的版本范围是否被目标运行时满足,避免再出现「六项全绿却装不上」。该检查自带极简 semver 实现(`scripts/semver-lite.mjs`)与单元测试。
+- **设置页在 `dsh web --host <局域网地址>` 下可用**(DSH 0.2.1 起支持把 GUI 绑到具体接口地址):`/mlx/api` 的 Host 校验从「必须是回环地址」放宽为「回环 **或** 恰好等于连接落入的本机接口地址」,DNS rebinding 防护不变。
+- **本机判定改用 URL 解析**:新增 `lib/local.js`,让「思考强度补全」与「llm/stream 拦截器」共用同一判据,并修掉 `baseURL.includes("127.0.0.1")` 会把 `https://example.com/?next=127.0.0.1` 误判成本机服务的隐患;服务绑到局域网地址时也能按 origin 识别。
+- `~/.dsh/mlx/logs/server.log` 改为跟随 `$DSH_HOME`(与启动探针 `plugin-boot.log` 一致),隔离 home / 测试 profile 不再把日志写进真实 home;venv 目录仍默认共享 `~/.dsh/mlx/venv`(可用 `venvDir` 覆盖)。
+- `/mlx/api` 请求体加上 1MB 上限,超限返回 413。
 
 > **0.5.0 是破坏性更新:只支持 DSH 0.1.7 及以后,且模型目录需要手工迁移一次。**
 
@@ -74,7 +84,7 @@ DSH 0.1.7 重写了设置架构,插件此前依赖的 `settings.installSection` 
 
 ```bash
 dsh plugin --profile web remove dsh-mlx-local
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.2/dsh-mlx-local-0.5.2.tgz
 ```
 
 然后重启 DSH。模型目录等设置保存在 `settings.yaml` 中,升级不会丢失。
@@ -86,14 +96,14 @@ dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/do
 直接安装:
 
 ```bash
-dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.2/dsh-mlx-local-0.5.2.tgz
 ```
 
 如果 DSH 不跟随下载跳转,先手动下载:
 
 ```bash
-curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.1/dsh-mlx-local-0.5.1.tgz
-dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
+curl -L -O https://github.com/JshGao/dsh-mlx-local/releases/download/v0.5.2/dsh-mlx-local-0.5.2.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.2.tgz
 ```
 
 安装后重启 DSH。
@@ -105,7 +115,7 @@ git clone https://github.com/JshGao/dsh-mlx-local.git
 cd dsh-mlx-local
 npm install
 npm run pack
-dsh plugin --profile web add ./dsh-mlx-local-0.5.1.tgz
+dsh plugin --profile web add ./dsh-mlx-local-0.5.2.tgz
 ```
 
 然后重启 DSH。

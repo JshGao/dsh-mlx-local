@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 校验插件与真实 DSH 运行时的兼容性。六类检查,全部以目标运行时为准:
+ * 校验插件与真实 DSH 运行时的兼容性。七类检查,全部以目标运行时为准:
  *
  * 1. 服务端具名导入:lib/*.js 里 `import { X } from "@deepseek-ai/..."` 的每个 X
  *    是否真的被导出。ESM 的具名导入缺失是**链接期**错误,插件会直接加载失败。
@@ -18,6 +18,10 @@
  * 6. 客户端模块图:`package.json` 的 `dsh.client.inject` 里每个包名,是否真的在目标
  *    运行时的客户端模块图内(包存在**且**自带 `dsh.client` 声明)。host 只把带该声明
  *    的包编进图,图里没有的名字在浏览器端被静默跳过,顺序保证悄悄失效。
+ * 7. peerDependencies 版本范围:运行时里实际安装的版本是否落在 package.json
+ *    声明的范围内。第 1–6 项全绿也可能装不上:预发布 semver 规则下
+ *    `^0.2.0-rc.1` **匹配不了** `0.2.1-rc.2`,npm 会报 ERESOLVE,而代码本身
+ *    完全兼容——2026-10 的 0.2.1-rc.2 就是这样被漏掉的。
  *
  * 背景:`npm test` 只加载本仓库的 node_modules,发现不了上述漂移——插件最初对着
  * `0.1.0-rc.6` 写,却在 `0.1.5-rc.1` 上炸了两次(缺失导出、改名服务),都是本地全绿。
@@ -34,6 +38,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { satisfiesRange } from "./semver-lite.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCOPE = "@deepseek-ai/";
@@ -474,6 +479,69 @@ function checkClientInjectGraph(modulesRoot, names) {
 }
 
 /**
+ * 读取运行时里某个包的版本号(不做 import,避免副作用)。
+ * @param modulesRoot - 目标运行时的 node_modules。
+ * @param name - 包名(可带 scope)。
+ * @returns 版本号或 undefined。
+ */
+function installedVersionOf(modulesRoot, name) {
+	const scoped = name.startsWith(SCOPE)
+		? join(modulesRoot, SCOPE, name.slice(SCOPE.length), "package.json")
+		: join(modulesRoot, name, "package.json");
+	const candidates = [scoped];
+	try {
+		candidates.push(createRequire(join(modulesRoot, "__check-runtime__.js")).resolve(`${name}/package.json`));
+	} catch {
+		/* 包的 exports 可能不暴露 package.json,回落到路径拼接 */
+	}
+	for (const manifest of candidates) {
+		if (!existsSync(manifest)) continue;
+		try {
+			const version = JSON.parse(readFileSync(manifest, "utf8")).version;
+			if (typeof version === "string" && version.length > 0) return version;
+		} catch {
+			/* 读不出来继续尝试下一个候选 */
+		}
+	}
+	return undefined;
+}
+
+/**
+ * 校验 `package.json` 的 peerDependencies 是否被目标运行时满足。
+ *
+ * 这一层专治「代码全兼容、但装不上」:npm 的预发布规则要求版本与范围在
+ * 同一 `major.minor.patch` 上才比较 prerelease,所以 `^0.2.0-rc.1` 永远
+ * 匹配不到 `0.2.1-rc.2`。声明范围老了一版时,前六项检查可以全绿。
+ * @param modulesRoot - 目标运行时的 node_modules。
+ * @returns 失败条数。
+ */
+function checkPeerRanges(modulesRoot) {
+	console.log("\npeerDependencies 版本范围\n");
+	const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+	const peers = Object.entries(pkg.peerDependencies ?? {});
+	if (peers.length === 0) {
+		console.log("(package.json 未声明 peerDependencies)");
+		return 0;
+	}
+	let failures = 0;
+	for (const [name, range] of peers.sort(([left], [right]) => left.localeCompare(right))) {
+		const version = installedVersionOf(modulesRoot, name);
+		if (version === undefined) {
+			console.log(`- ${name} — 运行时没有该包,无法验证范围 ${range}`);
+			continue;
+		}
+		if (satisfiesRange(version, range)) {
+			console.log(`✓ ${name}@${version} ⊂ ${range}`);
+			continue;
+		}
+		failures += 1;
+		console.log(`✗ ${name}@${version} 不在声明的范围 ${range} 内`);
+		console.log("    预发布版本只与同 major.minor.patch 的预发布范围比较;请把该版本线写进 peerDependencies");
+	}
+	return failures;
+}
+
+/**
  * 判断运行时源码里是否**定义了**方法 `method`,而不只是调用了同名方法。
  *
  * 判据是「方法名前面不是点」:类方法是 `\tregister(route) {`,调用是
@@ -598,8 +666,10 @@ for (const [name, origins] of [...declaredSlotNames()].sort(([a], [b]) => a.loca
 	console.log(`    领用位置: ${[...origins].join(", ")}`);
 }
 
+failures += checkPeerRanges(modulesRoot);
+
 if (failures > 0) {
-	console.log(`\n${failures} 处不兼容;插件在目标运行时上会加载失败、报错或静默失效。`);
+	console.log(`\n${failures} 处不兼容;插件在目标运行时上会加载失败、报错、静默失效或装不上。`);
 	process.exit(1);
 }
-console.log("\n服务端导入、服务名、服务方法、订阅事件、客户端注入与界面槽在目标运行时中全部存在。");
+console.log("\n服务端导入、服务名、服务方法、订阅事件、客户端注入、界面槽与 peerDependencies 在目标运行时中全部成立。");
